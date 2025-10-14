@@ -3,7 +3,7 @@ import ee
 import openet.core.common
 
 import sys
-sys.path.append('C:/Users/bruno/OneDrive/Documents/GitHub/rad_temp/')
+#sys.path.append('C:/Users/bruno/OneDrive/Documents/GitHub/rad_temp/')
 from radet import landsat
 from radet import model
 from radet import utils

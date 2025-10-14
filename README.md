@@ -1,2 +1,2 @@
-# openet-radet-beta
-OpenET RADET Model
+# radet-beta
+RADET Model 
