@@ -96,12 +96,6 @@ def et(
     # Clear-Sky terms
     Rs_MJ, fcd, sunrise_ts = clear_sky_terms(time_start, lat, elev, srad)
 
-    # LAI <- 10 if open water
-    lai_corrected = lai_correct_water(lai)
-
-    # Penman aerodynamic term
-    Ea = aerodynamic_term(lai_corrected, gamma, DELTA, u2, esat, ea)
-
     # Daily mean LST and surface humidity
     LST_avg = daily_avg_lst(tminK, lst, sunrise_ts, t_avg)
 
@@ -109,10 +103,9 @@ def et(
     RHs = ee.Image().expression("ea/esat_LST", {"ea": ea, "esat_LST": esat_LST})
 
     # Daily mean net radiation (total, soil and canopy)
-    Rn, Rns, Rnc = net_radiation(emissivity, LST_avg, ea, esat_LST, fcd, t_avg, Rs_MJ, albedo, lai_corrected)
+    Rn, Rns, Rnc, G = net_radiation(emissivity, LST_avg, ea, esat_LST, fcd, t_avg, Rs_MJ, albedo, lai)
 
-    # Soil heat flux
-    G = ee.Image().expression("0.35*Rns - 2", {"Rns": Rns}).rename("G")
+    delta_LC, delta_lai, RHs = wet_mask(lai,RHs)
 
     # Isothermal net radiation and available energy
     Rni, AEs, AEsi = Rni_AE(Rn, emissivity, t_avg, LST_avg, Rns, G)
@@ -121,11 +114,15 @@ def et(
     mu_c, mu_s = mu_terms(Rn, Rni, DELTA, gamma, AEs, AEsi, RHs)
 
     # ET model (mm/day)
-    ET_DIF = DIF_model(gamma, DELTA, Rnc, AEs, RHs, mu_c, mu_s)
+    ET_DIF = DIF_model(gamma, DELTA, Rnc, AEs, lai, RHs, mu_c, mu_s)
+
+    # Penman aerodynamic term
+    Ea = aerodynamic_term(delta_LC, delta_lai, gamma, DELTA, u2, esat, ea)
+
 
     return ee.Image(ET_DIF.add(Ea).rename("ET")).setDefaultProjection(proj)
 
-def lai_correct_water(lai):
+def wet_mask(lai, RHs):
     # USGS NLCD land cover (2020)
     # Load land cover image
     # TODO: make the search for land cover images dynamic
@@ -133,26 +130,16 @@ def lai_correct_water(lai):
     landcover = ee.ImageCollection("projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER")
     landcover_2020 = landcover.filter(ee.Filter.eq("year", 2020)).first()
 
-    # Define open water mask and set LAI = 10
+    # Define open water mask and set LAI = 10 and RHs=1
     water = landcover_2020.remap([11], [1], 0).eq(1)
-    lai_corrected = lai.where(water, 10)
-    
-    return lai_corrected
-
-
-def wet_mask(lai):
-    # USGS NLCD land cover (2020)
-    # Load land cover image
-    # TODO: make the search for land cover images dynamic
-
-    landcover = ee.ImageCollection("projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER")
-    landcover_2020 = landcover.filter(ee.Filter.eq("year", 2020)).first()
+    lai = lai.where(water, 10)
+    RHs = RHs.where(water,1)    
 
     # Define wet surfaces
     wet = landcover_2020.remap([11, 81, 82, 95], [1, 1, 1, 1], 0).eq(1)
     wet_ww = landcover_2020.remap([90], [1], 0).eq(1)
     wet_ww2 = wet_ww.And(lai.lt(1))
-    return ee.Image(wet.Or(wet_ww2))
+    return ee.Image(wet.Or(wet_ww2)), ee.Image().expression("(1-exp(-0.7*lai))", {"lai": lai}), RHs
 
 
 def wind_10m_2m(u):
@@ -432,7 +419,7 @@ def daily_avg_lst(tminK, lst, sunrise_ts, t_avg):
     return LST_max.add(LST_min).multiply(0.5).max(t_avg)
 
 
-def net_radiation(emissivity, LST_avg, ea, esat_LST, fcd, t_avg, Rs_MJ, albedo, lai_corrected):
+def net_radiation(emissivity, LST_avg, ea, esat_LST, fcd, t_avg, Rs_MJ, albedo, lai):
     Rlu = emissivity.multiply(LST_avg.pow(4).multiply(SIG)).rename("Rlup")
 
     # Incoming longwave radiation
@@ -451,10 +438,11 @@ def net_radiation(emissivity, LST_avg, ea, esat_LST, fcd, t_avg, Rs_MJ, albedo, 
         .rename("Rn")
     )
 
-    Rns = ee.Image().expression("Rn*exp(-0.6*lai)", {"Rn": Rn, "lai": lai_corrected}).rename("Rns")
+    Rns = ee.Image().expression("Rn*exp(-0.6*lai)", {"Rn": Rn, "lai": lai}).rename("Rns")
     Rnc = ee.Image().expression("Rn - Rns", {"Rn": Rn, "Rns": Rns}).rename("Rnc")
-
-    return Rn, Rns, Rnc
+    G = ee.Image().expression("0.35*Rn*exp(-0.6*lai) - 2", {"Rn": Rn, "lai": lai}).rename("G")
+    
+    return Rn, Rns, Rnc, G
 
 
 def Rni_AE(Rn, emissivity, t_avg, LST_avg, Rns, G):
@@ -506,20 +494,21 @@ def mu_terms(Rn, Rni, DELTA, gamma, AEs, AEsi, RHs):
     return mu_c, mu_s
 
 
-def aerodynamic_term(lai_corrected, gamma, DELTA, u2, esat, ea):
-    wet = wet_mask(lai_corrected)
+def aerodynamic_term(delta_LC, delta_lai, gamma, DELTA, u2, esat, ea):
 
     return (
         ee.Image()
         .expression(
-            "wet_mask*(1-exp(-0.7*lai))*gamma/(DELTA + gamma)*(esat-ea)*2.6*(1+0.54*u2)",
-            {"gamma": gamma, "DELTA": DELTA, "u2": u2, "esat": esat, "ea": ea, "lai": lai_corrected, "wet_mask": wet},
+            "delta_LC*delta_lai*gamma/(DELTA + gamma)*(esat-ea)*2.6*(1+0.54*u2)",
+            {"gamma": gamma, "DELTA": DELTA, "u2": u2, "esat": esat, "ea": ea, "delta_lai": delta_lai, "delta_LC": delta_LC},
         )
         .rename("Ea")
     )
 
 
-def DIF_model(gamma, DELTA, Rnc, AEs, RHs, mu_c, mu_s):
+def DIF_model(gamma, DELTA, Rnc, AEs, lai, RHs, mu_c, mu_s):
+    wet, lai, RHs = wet_mask(lai,RHs)
+    
     return (
         ee.Image()
         .expression(
