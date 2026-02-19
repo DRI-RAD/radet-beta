@@ -1,5 +1,72 @@
 import ee
 
+def evi2(landsat_image):
+    """two band enhanced vegetation index (Jiang et al., 2008)
+
+    Parameters
+    ----------
+    landsat_image : ee.Image
+        Landsat image with standardized band names.
+
+    Returns
+    -------
+    ee.Image
+
+    References
+    ----------
+
+    """
+    evi2 = landsat_image.expression(
+        '2.5*(nir - red) / (nir + red * 2.4 + 1)', {
+            'red': landsat_image.select('red'),
+            'nir': landsat_image.select('nir'),
+        }).rename('evi2').clamp(0,1.25)
+
+    return evi2
+
+def ndmi_scaled(landsat_image):
+    """Normalized difference moisture index (Gao 1996)
+
+    Parameters
+    ----------
+    landsat_image : ee.Image
+        Landsat image with standardized band names.
+
+    Returns
+    -------
+    ee.Image
+
+    References
+    ----------
+
+    """
+    return ee.Image(landsat_image).normalizedDifference(['nir','swir1'])\
+        .unmask(0).add(0.3).divide(0.3).clamp(0,1).rename('ndmi_scaled')    
+
+def lai(landsat_image):
+    """Leaf area index (Kang et al., 2016 + NDMI correction)
+
+    Parameters
+    ----------
+    landsat_image : ee.Image
+        Landsat image with standardized band names.
+
+    Returns
+    -------
+    ee.Image
+
+    References
+    ----------
+    .. [Kang2016] Kang et al, How Universal Is the Relationship between Remotely Sensed Vegetation Indices and Crop Leaf Area Index? A Global Assessment.
+
+    """
+    return ee.Image(landsat_image).expression('NDMI_scaled*(2.92*sqrt(EVI2)-0.43)**2', {
+        'EVI2': evi2(ee.Image(landsat_image)),
+        'NDMI_scaled': ndmi_scaled(ee.Image(landsat_image))
+    }).clamp(0,8).rename('lai')
+
+
+    
 
 def ndvi(landsat_image):
     """Normalized difference vegetation index
@@ -19,63 +86,7 @@ def ndvi(landsat_image):
     """
     return ee.Image(landsat_image).normalizedDifference(['nir', 'red'])\
         .rename(['ndvi']).unmask(0)
-
-
-def fipar(landsat_image):
-    """Fraction of intercepted photosynthetically active radiation
-
-    Parameters
-    ----------
-    landsat_image : ee.Image
-        Landsat image with standardized band names.
-
-    Returns
-    -------
-    ee.Image
-
-    Notes
-    -----
-    fipar = m1*ndvi + b1 (Eqn)
-    m1 =1
-    b1 = -0.05
-
-    References
-    ----------
-    .. [Fisher2008] J. Fisher, K. Tu, D. Baldocchi,
-       Global estimates of the land-atmosphere water flux based on monthly
-       AVHRR and ISLSCP-II data, validated at 16 FLUXNET sites,
-       Remote Sensing of Environment,
-       https://doi.org/10.1016/j.rse.2007.06.025
-
-    """
-    ndvi_clamp = ndvi(landsat_image).clamp(0.0, 1.0)
-
-    return ndvi_clamp.multiply(1).subtract(0.05).clamp(0.0, 1.0)\
-        .rename('fipar')
-
-
-def lai(landsat_image):
-    """Leaf area index
-
-    Parameters
-    ----------
-    landsat_image : ee.Image
-        Landsat image with standardized band names.
-
-    Returns
-    -------
-    ee.Image
-
-    References
-    ----------
-    .. [Ross1976] J. Ross, Radiative transfer in plant communities,
-       In J. L. Monteith (Ed.),Vegetation and the atmosphere.
-
-    """
-    return ee.Image(landsat_image).expression('-log(1 - fIPAR) / (KPAR)', {
-        'fIPAR': fipar(ee.Image(landsat_image)),
-        'KPAR': ee.Number(0.5)
-    }).rename('lai')
+    
 
 
 def ndwi(landsat_image):
@@ -110,89 +121,46 @@ def landsat_c2_qa_water_mask(landsat_image):
     return water_mask.rename(['qa_water'])
 
 
-def emissivity(landsat_image):
-    """Broad-band surface emissivity
+def albedo_disalexi(landsat_image):
+    """Total shortwave broadband albedo following [Liang2001]
 
     Parameters
     ----------
     landsat_image : ee.Image
-        Landsat image with standardized band names.
+        "Prepped" Landsat image with standardized band names.
 
     Returns
     -------
-    ee.Image
+    albedo : ee.Image
+
+    Notes
+    -----
+    The Python DisALEXI code had the following line and comment:
+        "bands = [1, 3, 4, 5, 7]  # dont use blue"
+    IDL code and [Liang2001] indicate that the green band is not used.
+    Coefficients were derived for Landsat 7 ETM+, but were found to be
+        "suitable" to Landsat 4/5 TM also.
 
     References
     ----------
+    .. [Liang2001] Shunlin Liang (2001).  Narrowband to broadband conversions
+        of land surface albedo - I Algorithms,
+        Remote Sensing of Environment, Volume 76, Issue2, Pages 213-238,
+        http://doi.org/10.1016/S0034-4257(00)00205-4
 
     """
-    return lai(landsat_image).multiply(0.01).add(0.95).min(0.98)\
-        .rename('emissivity')
-
-
-def lst(landsat_image):
-    """Land surface temperature (lst)
-
-    Parameters
-    ----------
-    landsat_image : ee.Image
-        Landsat image with standardized band names.
-
-    Returns
-    -------
-    ee.Image
-
-    References
-    ----------
-
-    """
-    lai_img = lai(landsat_image)
-    ndvi_img = ndvi(landsat_image)
-
-    # Narrow band transmissivity
-    e_NB = landsat_image.expression('0.97 + (0.0033 * LAI)', {'LAI': lai_img})
-    e_NB = e_NB.where(lai_img.gt(3), 0.98).rename('e_NB')
-
-    # Water and Snow filter
-    e_NB = e_NB.where(ndvi_img.lt(0), 0.99).rename('e_NB')
-    e_NB = e_NB.where(ndvi_img.lt(0), 0.99).rename('e_NB')
-
-    lst = landsat_image.expression(
-        'Tb / ( 1 + ( ( comp_onda * Tb / fator) * log_eNB))', {
-            'Tb': landsat_image.select('tir'),
-            'comp_onda': ee.Number(1.115e-05),
-            'log_eNB': e_NB.log(),
-            'fator': ee.Number(1.438e-02),
-        }).rename('lst')
-
-    return lst
-
-
-def savi(landsat_image):
-    """Soil adjusted vegetation index
-
-    Parameters
-    ----------
-    landsat_image : ee.Image
-        Landsat image with standardized band names.
-
-    Returns
-    -------
-    ee.Image
-
-    References
-    ----------
-
-    """
-    savi = landsat_image.expression(
-        '((1 + 0.5) * (B5 - B4)) / (0.5 + (B5 + B4))', {
-            'B4': landsat_image.select('red'),
-            'B5': landsat_image.select('nir'),
-        }).rename('savi')
-    savi = savi.where(savi.gt(0.689), 0.689)
-
-    return savi
-
+    albedo_img = (
+        landsat_image
+        .select(['blue', 'red', 'nir', 'swir1', 'swir2'])
+        .multiply([0.356, 0.130, 0.373, 0.085, 0.072])
+    )
+    return (
+        albedo_img.select([0])
+        .add(albedo_img.select([1])).add(albedo_img.select([2]))
+        .add(albedo_img.select([3])).add(albedo_img.select([4]))
+        .subtract(0.0018)
+        .rename(['albedo'])
+    )
 
 def albedo_l457(landsat_image):
     """Albedo (Landsat 4/5/7)

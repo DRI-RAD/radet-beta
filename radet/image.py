@@ -27,7 +27,7 @@ def lazy_property(fn):
 
 
 class Image:
-    """Google Earth Engine SEBAL - RADET for Landsat image"""
+    """Google Earth Engine - RADET for Landsat image"""
 
     _C2_LST_CORRECT = True  # Enable (True) C2 LST correction to recalculate LST
 
@@ -44,7 +44,7 @@ class Image:
         image : ee.Image
             A "prepped" RADET input image.
             Image must have bands:
-                ndvi, lai, lst, emissivity, ndwi, albedo
+                evi2, lst, emissivity, ndmi, albedo
             Image must have properties:
                 SUN_ELEVATION, system:id, system:index, system:time_start
         meteorology_source_daily : str
@@ -199,11 +199,12 @@ class Image:
         spacecraft_id = ee.String(sr_image.get("SPACECRAFT_ID"))
 
         # Rename bands to generic names
+        # YK - add ST_EMIS band
         input_bands = ee.Dictionary(
             {
-                "LANDSAT_4": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "ST_B6", "QA_PIXEL"],
-                "LANDSAT_5": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "ST_B6", "QA_PIXEL"],
-                "LANDSAT_7": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "ST_B6", "QA_PIXEL"],
+                "LANDSAT_4": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "ST_B6", "QA_PIXEL", "ST_EMIS"],
+                "LANDSAT_5": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "ST_B6", "QA_PIXEL", "ST_EMIS"],
+                "LANDSAT_7": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "ST_B6", "QA_PIXEL", "ST_EMIS"],
                 "LANDSAT_8": [
                     "SR_B1",
                     "SR_B2",
@@ -214,6 +215,7 @@ class Image:
                     "SR_B7",
                     "ST_B10",
                     "QA_PIXEL",
+                    "ST_EMIS"
                 ],
                 "LANDSAT_9": [
                     "SR_B1",
@@ -225,14 +227,15 @@ class Image:
                     "SR_B7",
                     "ST_B10",
                     "QA_PIXEL",
+                    "ST_EMIS"
                 ],
             }
         )
         output_bands = ee.Dictionary(
             {
-                "LANDSAT_4": ["blue", "green", "red", "nir", "swir1", "swir2", "lst", "QA_PIXEL"],
-                "LANDSAT_5": ["blue", "green", "red", "nir", "swir1", "swir2", "lst", "QA_PIXEL"],
-                "LANDSAT_7": ["blue", "green", "red", "nir", "swir1", "swir2", "lst", "QA_PIXEL"],
+                "LANDSAT_4": ["blue", "green", "red", "nir", "swir1", "swir2", "lst", "QA_PIXEL", "ASTER_GED_emissivity"],
+                "LANDSAT_5": ["blue", "green", "red", "nir", "swir1", "swir2", "lst", "QA_PIXEL", "ASTER_GED_emissivity"],
+                "LANDSAT_7": ["blue", "green", "red", "nir", "swir1", "swir2", "lst", "QA_PIXEL", "ASTER_GED_emissivity"],
                 "LANDSAT_8": [
                     "ultra_blue",
                     "blue",
@@ -243,6 +246,7 @@ class Image:
                     "swir2",
                     "lst",
                     "QA_PIXEL",
+                    "ASTER_GED_emissivity"
                 ],
                 "LANDSAT_9": [
                     "ultra_blue",
@@ -254,6 +258,7 @@ class Image:
                     "swir2",
                     "lst",
                     "QA_PIXEL",
+                    "ASTER_GED_emissivity"
                 ],
             }
         )
@@ -268,6 +273,7 @@ class Image:
                     0.0000275,
                     0.00341802,
                     1,
+                    0.0001
                 ],
                 "LANDSAT_5": [
                     0.0000275,
@@ -278,6 +284,7 @@ class Image:
                     0.0000275,
                     0.00341802,
                     1,
+                    0.0001
                 ],
                 "LANDSAT_7": [
                     0.0000275,
@@ -288,6 +295,7 @@ class Image:
                     0.0000275,
                     0.00341802,
                     1,
+                    0.0001
                 ],
                 "LANDSAT_8": [
                     0.0000275,
@@ -299,6 +307,7 @@ class Image:
                     0.0000275,
                     0.00341802,
                     1,
+                    0.0001
                 ],
                 "LANDSAT_9": [
                     0.0000275,
@@ -310,16 +319,17 @@ class Image:
                     0.0000275,
                     0.00341802,
                     1,
+                    0.0001
                 ],
             }
         )
         offsets = ee.Dictionary(
             {
-                "LANDSAT_4": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0],
-                "LANDSAT_5": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0],
-                "LANDSAT_7": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0],
-                "LANDSAT_8": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0],
-                "LANDSAT_9": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0],
+                "LANDSAT_4": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0, 0],
+                "LANDSAT_5": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0, 0],
+                "LANDSAT_7": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0, 0],
+                "LANDSAT_8": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0, 0],
+                "LANDSAT_9": [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, 149.0, 0, 0],
             }
         )
 
@@ -331,11 +341,15 @@ class Image:
 
         # CGM - Need to come up with a more robust approach,
         #   but this seems to work for now
-        albedo = ee.Algorithms.If(
-            ee.List(["LANDSAT_8", "LANDSAT_9"]).contains(spacecraft_id),
-            landsat.albedo_l89(prep_image),
-            landsat.albedo_l457(prep_image),
-        )
+        #albedo = ee.Algorithms.If(
+        #    ee.List(["LANDSAT_8", "LANDSAT_9"]).contains(spacecraft_id),
+        #   landsat.albedo_l89(prep_image),
+        #    landsat.albedo_l457(prep_image),
+        #)
+
+        # YK - RADET used Disalexi albedo 
+        albedo = landsat.albedo_disalexi(prep_image)
+        
         cloud_mask = ee.Algorithms.If(
             ee.List(["LANDSAT_8", "LANDSAT_9"]).contains(spacecraft_id),
             landsat.cloud_mask_C2_l89(sr_image),
@@ -379,15 +393,19 @@ class Image:
         else:
             lst = prep_image.select(["lst"])
 
+        emissivity = prep_image.select(["ASTER_GED_emissivity"])    
+
         # Build the input image
         # Don't compute LST since it is being provided
+        # YK: Don't compute emissivity 
         input_image = ee.Image(
             [
                 lst.rename(["lst"]),
                 landsat.ndvi(prep_image),
                 landsat.lai(prep_image),
-                landsat.savi(prep_image),
-                landsat.emissivity(prep_image),
+                #landsat.savi(prep_image),
+                #landsat.emissivity(prep_image),
+                emissivity.rename(["emissivity"]),
                 landsat.ndwi(prep_image),
                 albedo,
             ]
@@ -478,19 +496,12 @@ class Image:
         return self.image.select(["albedo"]).set(self._properties)
 
     @lazy_property
-    def savi(
-        self,
-    ):
-
-        return self.image.select(["savi"]).set(self._properties)
-
-    @lazy_property
     def lst(
         self,
     ):
 
         return self.image.select(["lst"]).set(self._properties)
-
+    
     @lazy_property
     def et(
         self,
@@ -498,8 +509,6 @@ class Image:
 
         et = model.et(
             image=self.image,
-            ndvi=self.ndvi,
-            ndwi=self.ndwi,
             lai=self.lai,
             lst=self.lst,
             albedo=self.albedo,
