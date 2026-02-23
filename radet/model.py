@@ -407,7 +407,6 @@ def meteorology_gridmet(time_start, meteorology_source_daily):
     Notes
     -----
     Accepted collections:
-    Inst : NASA/NLDAS/FORA0125_H002
     Daily : IDAHO_EPSCOR/GRIDMET
 
     References
