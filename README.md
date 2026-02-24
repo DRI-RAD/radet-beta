@@ -49,7 +49,28 @@ Examples of how to use RADET model are detailed in examples folder.
 
 - [earthengine-api](https://github.com/google/earthengine-api)
 - [openet-core](https://github.com/Open-ET/openet-core)
+- [pandas](https://pypi.org/project/pandas/)
 
+## Installation
+
+```
+pip install earthengine-api openet-core pandas
+```
+
+### Google Earth Engine Authentication
+
+This project uses the Google Earth Engine (GEE) Python API for geospatial data extraction.
+
+1. Install [Google Cloud CLI](https://cloud.google.com/sdk/docs/install-sdk)
+2. Create a GCloud project (e.g., `gee-radet`) with GEE API enabled at https://console.cloud.google.com/
+3. Configure the project:
+   ```bash
+   gcloud config set project gee-radet
+   gcloud auth application-default set-quota-project gee-radet  # if prompted
+   earthengine authenticate
+   ```
+
+See the [Earth Engine Python installation guide](https://developers.google.com/earth-engine/guides/python_install) for details.
 
 ## References
 
