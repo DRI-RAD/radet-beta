@@ -41,20 +41,25 @@ The input Landsat image must have the following bands and properties:
 
 The primary output of the RADET-beta is the actual ET (ETa) in millimeters.
 
-### Example
+### Examples
 
-Examples of how to use RADET model are detailed in examples folder.
+The `examples/` folder contains the following:
+
+- [single_image.ipynb](examples/single_image.ipynb) — Compute RADET for a single Landsat image
+- [collection_interpolate.ipynb](examples/collection_interpolate.ipynb) — Build an ET image collection (OpenET SSEBop) and interpolate
+- [eecu_analysis.py](examples/eecu_analysis.py) — Analyze Earth Engine Compute Unit (EECU) usage across OpenET models
 
 ## Dependencies
 
 - [earthengine-api](https://github.com/google/earthengine-api)
 - [openet-core](https://github.com/Open-ET/openet-core)
 - [pandas](https://pypi.org/project/pandas/)
+- [seaborn](https://seaborn.pydata.org/)
 
 ## Installation
 
 ```
-pip install earthengine-api openet-core pandas
+pip install earthengine-api openet-core pandas matplotlib
 ```
 
 ### Google Earth Engine Authentication
