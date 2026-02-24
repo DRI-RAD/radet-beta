@@ -1,5 +1,10 @@
 # RADET - beta
 
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
+[![GEE](https://img.shields.io/badge/Google%20Earth%20Engine-4285F4?logo=google-earth&logoColor=white)](https://earthengine.google.com/)
+![Status](https://img.shields.io/badge/Status-Beta-yellow)
+[![DOI](https://img.shields.io/badge/DOI-10.31223%2FX51B4P-blue)](https://doi.org/10.31223/X51B4P)
 
 **WARNING:** This code is in development and may change without notice.
 
@@ -49,6 +54,30 @@ The `examples/` folder contains the following:
 - [collection_interpolate.ipynb](examples/collection_interpolate.ipynb) — Build an ET image collection (OpenET SSEBop) and interpolate
 - [eecu_analysis.py](examples/eecu_analysis.py) — Analyze Earth Engine Compute Unit (EECU) usage across OpenET models
 
+## Project Structure
+
+```
+radet-beta/
+├── radet/
+│   ├── __init__.py
+│   ├── collection.py      # ET image collection builder
+│   ├── image.py            # Core Image class for single ET computation
+│   ├── interpolate.py      # Temporal interpolation utilities
+│   ├── landsat.py          # Landsat-specific preprocessing
+│   ├── model.py            # RADET model implementation
+│   └── utils.py            # Helper functions
+├── examples/
+│   ├── single_image.ipynb
+│   ├── collection_interpolate.ipynb
+│   ├── eecu_analysis.py
+│   ├── eecu_data/            # Raw EECU input data
+│   └── eecu_output/          # Generated EECU analysis results
+├── __init__.py
+├── .gitignore
+├── LICENSE
+└── README.md
+```
+
 ## Dependencies
 
 - [earthengine-api](https://github.com/google/earthengine-api)
@@ -59,7 +88,7 @@ The `examples/` folder contains the following:
 ## Installation
 
 ```
-pip install earthengine-api openet-core pandas matplotlib
+pip install earthengine-api openet-core pandas seaborn
 ```
 
 ### Google Earth Engine Authentication
