@@ -1,6 +1,10 @@
+import logging
 import math
 
 import ee
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 pi = math.pi
 SIG = 4.901e-9
@@ -228,12 +232,13 @@ def wet_mask(time_start, lai):
     # Load land cover image
 
     YEAR = ee.Number(ee.Date(time_start).get('year'))
-
     landcover = ee.ImageCollection("projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER")
     landcover_img = landcover.filter(ee.Filter.eq("year", YEAR)).first()
-
+    if landcover_img.getInfo() is None:
+        landcover_img = landcover.sort("year", False).first()
+        land_cover_year = landcover_img.get("year").getInfo()
+        logger.info(f"No NLCD data for year {YEAR.getInfo()}. Using closest available year: {land_cover_year}.")
     water = landcover_img.remap([11], [1], 0).eq(1)
-
     # Define wet surfaces
     wet = landcover_img.remap([11, 81, 82, 95], [1, 1, 1, 1], 0).eq(1)
     wet_ww = landcover_img.remap([90], [1], 0).eq(1)

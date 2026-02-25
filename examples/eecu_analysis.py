@@ -90,6 +90,7 @@ if __name__ == "__main__":
     df_plot = df[["Date", "Model", "EECU (hours)", "Completed"]].copy()
     df_plot = df_plot[(df_plot["EECU (hours)"] > 0) & (df_plot["Completed"] > 0)]
     df_plot["EECU (hours/task)"] = df_plot["EECU (hours)"] / df_plot["Completed"]
+    df_plot["EECU (secs/task)"] = df_plot["EECU (hours/task)"] * 3600
     os.makedirs(eecu_output_dir, exist_ok=True)
     df_plot.to_csv(f"{eecu_output_dir}eecu_data.csv", index=False)
     for model in df_plot["Model"].unique():
@@ -106,36 +107,43 @@ if __name__ == "__main__":
 
     # Compute average EECU hours per task per model
     avg_eecu = df_plot.groupby("Model")["EECU (hours/task)"].mean().sort_values(ascending=False)
+    avg_eecu_secs = df_plot.groupby("Model")["EECU (secs/task)"].mean().sort_values(ascending=False)
 
     print("Average EECU (hours/task) per OpenET Model")
     print("=" * 45)
     print(avg_eecu.to_string())
+    print("\nAverage EECU (secs/task) per OpenET Model")
+    print("=" * 45)
+    print(avg_eecu_secs.to_string())
+    # plot_col = "EECU (hours/task)" 
+    plot_col = "EECU (secs/task)" # uncomment the above and comment this to plot hours instead of seconds
 
     # Descriptive statistics per model
-    desc_stats = df_plot.groupby("Model")["EECU (hours/task)"].describe()
+    desc_stats = df_plot.groupby("Model")[plot_col].describe()
     print("\nDescriptive Statistics per OpenET Model")
     print("=" * 70)
     print(desc_stats.to_string())
     print()
 
-    # Boxplot of EECU hours per task per model
+    # Boxplot of EECU seconds per task per model
     model_order = avg_eecu.index.tolist()[::-1]  # Order by average EECU, lowest to highest
     sns.set_theme(style='whitegrid', font_scale=1.2)
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.boxplot(
-        data=df_plot, x="Model", y="EECU (hours/task)", 
+        data=df_plot, x="Model", y=plot_col, 
         order=model_order, linewidth=1.2, ax=ax,
         # color=sns.color_palette("tab10")[0]
     )
     ax.set_yscale("log")    
     ax.set_xlabel("OpenET Model", fontsize=14)
-    ax.set_ylabel("EECU (hours/task, log scale)", fontsize=14)
+    ylab = f"{plot_col[:-1]}, log scale)"
+    ax.set_ylabel(ylab, fontsize=14)
     ax.tick_params(axis='both', labelsize=14)
     plt.tight_layout()
     plt.savefig(f"{eecu_output_dir}eecu_boxplot.png", dpi=600)
 
     # Barplot of mean EECU hours per task per model with error bars
-    summary = df_plot.groupby("Model")["EECU (hours/task)"].agg(["mean", "std"]).loc[model_order]
+    summary = df_plot.groupby("Model")[plot_col].agg(["mean", "std"]).loc[model_order]
     # Clip lower error bars to avoid negative values on log scale
     lower_err = summary['std'].clip(upper=summary['mean'] * 0.99)
     upper_err = summary['std']
@@ -153,12 +161,14 @@ if __name__ == "__main__":
         ax.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height() / 2,
-            f'{mean_val:.2f}',
+            f'{int(round(mean_val))}',
             ha='center', va='center', fontweight='bold', color='black', fontsize=14,
         )
     ax.set_yscale("log")
     ax.set_xlabel("OpenET Model", fontsize=14)
-    ax.set_ylabel("EECU (hours/task, log scale)", fontsize=14)
+    eecu_label = plot_col.replace("secs/task", "seconds task$^{-1}$")
+    ylab = f"{eecu_label}, log scale)"
+    ax.set_ylabel(ylab, fontsize=14)
     ax.tick_params(axis='both', labelsize=14)
     ax.yaxis.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout()
