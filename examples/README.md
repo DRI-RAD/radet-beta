@@ -4,17 +4,18 @@ This folder contains example notebooks and scripts demonstrating RADET model usa
 
 ## Notebooks
 
-- **radet_single_image.ipynb** — Compute RADET ET for a single Landsat image
-- **radet_collection_interpolate.ipynb** — Build an ET image collection and perform temporal interpolation
+- [radet_single_image.ipynb](radet_single_image.ipynb) — Compute RADET for a single Landsat image
+- [radet_collection_interpolate.ipynb](radet_collection_interpolate.ipynb) — Build a RADET image collection and interpolate
+- [runtime_comparison.ipynb](runtime_comparison.ipynb) — Compare runtimes of OpenET models (single Landsat image benchmark)
 
 ## Scripts
 
-- **eecu_analysis.py** — Analyze Earth Engine Compute Unit (EECU) usage across OpenET models
+- [eecu_analysis.py](eecu_analysis.py) — Analyze Earth Engine Compute Unit (EECU) usage across OpenET models
 
 ## Data
 
 - **eecu_data/** — Raw EECU input data
-- **eecu_output/** — Generated EECU analysis results (CSVs, plots)
+- **eecu_output/** — Generated EECU analysis results and runtime comparison outputs
 
 ## References
 

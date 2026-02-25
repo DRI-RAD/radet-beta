@@ -4,7 +4,7 @@ to understand the distribution of EECU hours across different OpenET models.
 It generates summary statistics and a boxplot to visualize the differences in EECU hours between models. 
 The cleaned data and results are saved to CSV files for further use.
 
-EECU Data Link: https://openet-dri.appspot.com/
+EECU Data Link: https://openet-dri.appspot.com/ (this link may not be active in the future, but the data file is included in the repository for reproducibility)
 Authors: Dr. Sayantan Majumdar, Charles Morton (Desert Research Institute)
 """
 
@@ -87,8 +87,9 @@ if __name__ == "__main__":
     df = pd.concat([others_agg, disalexi_agg], ignore_index=True) \
         .sort_values(by=["Date", "Model"], ascending=[False, True]) \
         .reset_index(drop=True)
-    df_plot = df[["Date", "Model", "EECU (hours)"]].copy()
-    df_plot = df_plot[df_plot["EECU (hours)"] > 0]
+    df_plot = df[["Date", "Model", "EECU (hours)", "Completed"]].copy()
+    df_plot = df_plot[(df_plot["EECU (hours)"] > 0) & (df_plot["Completed"] > 0)]
+    df_plot["EECU (hours/task)"] = df_plot["EECU (hours)"] / df_plot["Completed"]
     os.makedirs(eecu_output_dir, exist_ok=True)
     df_plot.to_csv(f"{eecu_output_dir}eecu_data.csv", index=False)
     for model in df_plot["Model"].unique():
@@ -103,27 +104,27 @@ if __name__ == "__main__":
     print(date_range.to_string())
     print()
 
-    # Compute average EECU hours per model
-    avg_eecu = df_plot.groupby("Model")["EECU (hours)"].mean().sort_values(ascending=False)
+    # Compute average EECU hours per task per model
+    avg_eecu = df_plot.groupby("Model")["EECU (hours/task)"].mean().sort_values(ascending=False)
 
-    print("Average EECU (hours) per OpenET Model")
+    print("Average EECU (hours/task) per OpenET Model")
     print("=" * 45)
     print(avg_eecu.to_string())
 
     # Descriptive statistics per model
-    desc_stats = df_plot.groupby("Model")["EECU (hours)"].describe()
+    desc_stats = df_plot.groupby("Model")["EECU (hours/task)"].describe()
     print("\nDescriptive Statistics per OpenET Model")
     print("=" * 70)
     print(desc_stats.to_string())
     print()
 
-    # Boxplot of EECU hours per model
+    # Boxplot of EECU hours per task per model
     model_order = avg_eecu.index.tolist()
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(data=df_plot, x="Model", y="EECU (hours)", order=model_order, linewidth=1.2, ax=ax)
+    sns.boxplot(data=df_plot, x="Model", y="EECU (hours/task)", order=model_order, linewidth=1.2, ax=ax)
     ax.set_yscale("log")
     ax.set_xlabel("OpenET Model", fontsize=12)
-    ax.set_ylabel("EECU (hours) [log scale]", fontsize=12)
+    ax.set_ylabel("EECU (hours/task) [log scale]", fontsize=12)
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
     plt.savefig(f"{eecu_output_dir}eecu_boxplot.png", dpi=600)
