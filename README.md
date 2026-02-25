@@ -50,8 +50,8 @@ The primary output of the RADET-beta is the actual ET (ETa) in millimeters.
 
 The `examples/` folder contains the following:
 
-- [single_image.ipynb](examples/single_image.ipynb) — Compute RADET for a single Landsat image
-- [collection_interpolate.ipynb](examples/collection_interpolate.ipynb) — Build an ET image collection (OpenET SSEBop) and interpolate
+- [radet_single_image.ipynb](examples/radet_single_image.ipynb) — Compute RADET for a single Landsat image
+- [radet_collection_interpolate.ipynb](examples/radet_collection_interpolate.ipynb) — Build a RADET image collection and interpolate
 - [eecu_analysis.py](examples/eecu_analysis.py) — Analyze Earth Engine Compute Unit (EECU) usage across OpenET models
 
 ## Project Structure
