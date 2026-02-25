@@ -119,12 +119,47 @@ if __name__ == "__main__":
     print()
 
     # Boxplot of EECU hours per task per model
-    model_order = avg_eecu.index.tolist()
+    model_order = avg_eecu.index.tolist()[::-1]  # Order by average EECU, lowest to highest
+    sns.set_theme(style='whitegrid', font_scale=1.2)
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(data=df_plot, x="Model", y="EECU (hours/task)", order=model_order, linewidth=1.2, ax=ax)
+    sns.boxplot(
+        data=df_plot, x="Model", y="EECU (hours/task)", 
+        order=model_order, linewidth=1.2, ax=ax,
+        # color=sns.color_palette("tab10")[0]
+    )
     ax.set_yscale("log")    
-    ax.set_xlabel("OpenET Model", fontsize=12)
-    ax.set_ylabel("EECU (hours/task, log scale)", fontsize=12)
-    plt.xticks(ha="right")
+    ax.set_xlabel("OpenET Model", fontsize=14)
+    ax.set_ylabel("EECU (hours/task, log scale)", fontsize=14)
+    ax.tick_params(axis='both', labelsize=14)
     plt.tight_layout()
     plt.savefig(f"{eecu_output_dir}eecu_boxplot.png", dpi=600)
+
+    # Barplot of mean EECU hours per task per model with error bars
+    summary = df_plot.groupby("Model")["EECU (hours/task)"].agg(["mean", "std"]).loc[model_order]
+    # Clip lower error bars to avoid negative values on log scale
+    lower_err = summary['std'].clip(upper=summary['mean'] * 0.99)
+    upper_err = summary['std']
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars = ax.bar(
+        summary.index,
+        summary['mean'],
+        yerr=[lower_err, upper_err],
+        capsize=5,
+        edgecolor='black',
+        linewidth=0.8,
+    )
+    # Annotate bars with mean values
+    for bar, mean_val in zip(bars, summary['mean']):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() / 2,
+            f'{mean_val:.2f}',
+            ha='center', va='center', fontweight='bold', color='black', fontsize=14,
+        )
+    ax.set_yscale("log")
+    ax.set_xlabel("OpenET Model", fontsize=14)
+    ax.set_ylabel("EECU (hours/task, log scale)", fontsize=14)
+    ax.tick_params(axis='both', labelsize=14)
+    ax.yaxis.grid(True, linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    plt.savefig(f"{eecu_output_dir}eecu_barplot.png", dpi=600)
