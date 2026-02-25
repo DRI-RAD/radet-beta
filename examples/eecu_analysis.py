@@ -136,7 +136,8 @@ if __name__ == "__main__":
     )
     ax.set_yscale("log")    
     ax.set_xlabel("OpenET Model", fontsize=14)
-    ylab = f"{plot_col[:-1]}, log scale)"
+    eecu_label = plot_col.replace("secs/task", "seconds task$^{-1}$")
+    ylab = f"{eecu_label}, log scale)"
     ax.set_ylabel(ylab, fontsize=14)
     ax.tick_params(axis='both', labelsize=14)
     plt.tight_layout()
