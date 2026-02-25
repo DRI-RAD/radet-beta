@@ -67,12 +67,12 @@ radet-beta/
 │   ├── model.py            # RADET model implementation
 │   └── utils.py            # Helper functions
 ├── examples/
-│   ├── single_image.ipynb
-│   ├── collection_interpolate.ipynb
+│   ├── README.md
+│   ├── radet_single_image.ipynb
+│   ├── radet_collection_interpolate.ipynb
 │   ├── eecu_analysis.py
 │   ├── eecu_data/            # Raw EECU input data
 │   └── eecu_output/          # Generated EECU analysis results
-├── __init__.py
 ├── .gitignore
 ├── LICENSE
 └── README.md
