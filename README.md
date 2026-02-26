@@ -53,8 +53,6 @@ The `examples/` folder contains the following:
 
 - [radet_single_image.ipynb](examples/radet_single_image.ipynb) — Compute RADET for a single Landsat image
 - [radet_collection_interpolate.ipynb](examples/radet_collection_interpolate.ipynb) — Build a RADET image collection and interpolate
-- [runtime_comparison.ipynb](examples/runtime_comparison.ipynb) — Compare runtimes of OpenET models
-- [eecu_analysis.py](examples/eecu_analysis.py) — Analyze Earth Engine Compute Unit (EECU) usage across OpenET models
 
 ## Project Structure
 
@@ -72,10 +70,6 @@ radet-beta/
 │   ├── README.md
 │   ├── radet_single_image.ipynb
 │   ├── radet_collection_interpolate.ipynb
-│   ├── runtime_comparison.ipynb
-│   ├── eecu_analysis.py
-│   ├── eecu_data/         # Raw EECU input data
-│   └── eecu_output/       # Generated analysis results and plots
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -85,18 +79,12 @@ radet-beta/
 
 - [earthengine-api](https://github.com/google/earthengine-api) # main RADET model dependency
 - [openet-core](https://pypi.org/project/openet-core/) # main RADET model dependency
-- [openet-sims](https://pypi.org/project/openet-sims/) # Only for runtime comparisons ([runtime_comparison.ipynb](examples/runtime_comparison.ipynb))
-- [openet-ssebop](https://pypi.org/project/openet-ssebop/) # Only for runtime comparisons ([runtime_comparison.ipynb](examples/runtime_comparison.ipynb))
-- [openet-ptjpl](https://pypi.org/project/openet-ptjpl/) # Only for runtime comparisons ([runtime_comparison.ipynb](examples/runtime_comparison.ipynb))
-- [openet-geesebal](https://pypi.org/project/openet-geesebal/) # Only for runtime comparisons ([runtime_comparison.ipynb](examples/runtime_comparison.ipynb))
-- [openet-disalexi](https://pypi.org/project/openet-disalexi/) # Only for runtime comparisons ([runtime_comparison.ipynb](examples/runtime_comparison.ipynb))
-- [pandas](https://pypi.org/project/pandas/) # For analysis scripts
-- [seaborn](https://seaborn.pydata.org/) # For analysis scripts
+- [pandas](https://pypi.org/project/pandas/) # For example notebooks
 
 ## Installation
 
 ```
-pip install earthengine-api openet-core pandas seaborn openet-sims openet-ptjpl openet-ssebop openet-disalexi openet-geesebal
+pip install earthengine-api openet-core pandas
 ```
 
 ### Google Earth Engine Authentication
@@ -113,6 +101,10 @@ This project uses the Google Earth Engine (GEE) Python API for geospatial data e
    ```
 
 See the [Earth Engine Python installation guide](https://developers.google.com/earth-engine/guides/python_install) for details.
+
+## Related Repositories
+
+- [radet-analysis](https://github.com/DRI-RAD/radet-analysis) — Analysis and evaluation workflows for RADET
 
 ## References
 
