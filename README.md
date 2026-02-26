@@ -5,7 +5,7 @@
 [![GEE](https://img.shields.io/badge/Google%20Earth%20Engine-4285F4?logo=google-earth&logoColor=white)](https://earthengine.google.com/)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
 [![EarthArXiv Preprint](https://img.shields.io/badge/EarthArXiv-10.31223%2FX51B4P-blue)](https://doi.org/10.31223/X51B4P)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18225226.svg)](https://doi.org/10.5281/zenodo.18225226)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18225224.svg)](https://doi.org/10.5281/zenodo.18225224)
 
 **WARNING:** This code is in development and may change without notice.
 
