@@ -9,7 +9,7 @@
 
 **WARNING:** This code is in development and may change without notice.
 
-This repository provides a Google Earth Engine (Python API) implementation of the **RADET model (Radiation Advection Diffusivity-independent Evapotranspiration)** for estimating actual evapotranspiration (ET). RADET estimates ET based on the Diffusivity-Independent Flux hypothesis and conditionally incorporates Penman’s aerodynamic term when and where advection is expected to be significant (Kim et al., 2026). The RADET-beta implementation here is designed to be consistent with the OpenET Python pipeline to facilitate interoperability and integration within existing workflows.
+This repository provides a Google Earth Engine (Python API) implementation of the **RADET model (Radiation Advection Diffusivity-independent Evapotranspiration)** for estimating actual evapotranspiration (ET). RADET estimates ET based on the Diffusivity-Independent Flux hypothesis and conditionally incorporates Penman’s aerodynamic term when and where advection is expected to be significant ([Kim et al., 2026](https://doi.org/10.31223/X51B4P)). The RADET-beta implementation here is designed to be consistent with the OpenET Python pipeline to facilitate interoperability and integration within existing workflows.
 
 ## Model Design
 
