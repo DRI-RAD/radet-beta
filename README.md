@@ -69,7 +69,7 @@ radet-beta/
 ├── examples/
 │   ├── README.md
 │   ├── radet_single_image.ipynb
-│   ├── radet_collection_interpolate.ipynb
+│   └── radet_collection_interpolate.ipynb
 ├── .gitignore
 ├── LICENSE
 └── README.md
