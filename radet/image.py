@@ -1,3 +1,5 @@
+import re
+
 import ee
 import openet.core.common
 
@@ -29,7 +31,10 @@ class Image:
     def __init__(
         self,
         image,
-        meteorology_source_daily="IDAHO_EPSCOR/GRIDMET",
+        meteorology_source="IDAHO_EPSCOR/GRIDMET",
+        landcover_source="projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER",
+        elevation_source="USGS/SRTMGL1_003",
+        latitude=None,
         **kwargs,
     ):
         """Construct a generic RADET Image
@@ -39,19 +44,36 @@ class Image:
         image : ee.Image
             A "prepped" RADET input image.
             Image must have bands:
-                evi2, lst, emissivity, ndmi, albedo
+                albedo, emissivity, lai, lst, emissivity, ndvi, ndwi
             Image must have properties:
                 SUN_ELEVATION, system:id, system:index, system:time_start
-        meteorology_source_daily : str
+        meteorology_source : {"IDAHO_EPSCOR/GRIDMET"}
             Daily meteorology source collection ID.
-            Collection supported:
-                GRIDMET: IDAHO_EPSCOR/GRIDMET
-                ERA5: projects/openet/assets/meteorology/era5land/sa/daily (not yet)
             Meteorology collection must have bands for:
                 min temp, max temp, solar rad, humidity, wind speed
-
+        landcover_source : {"projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER",
+                            "projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER/Annual_NLCD_LndCov_2023_CU_C1V1"}
+            Land cover source collection or image ID.
+            The default is "projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER".
+        elevation_source : str, ee.Image
+            Elevation source keyword or asset.
+            The default is "USGS/SRTMGL1_003".
+            Units must be in meters.
+        latitude : ee.Image, ee.Number, optional
+            Latitude [deg].  If not set will default to ee.Image.pixelLonLat().
         kwargs : dict, optional
-
+            et_reference_source : str, float
+                Reference ET source (the default is None).
+                Parameter is required if computing "et_fraction" or "et_reference".
+            et_reference_band : str
+                Reference ET band name (the default is None).
+                Parameter is required if computing "et_fraction" or "et_reference".
+            et_reference_factor : float, None
+                Reference ET scaling factor.  The default is None which is
+                equivalent to 1.0 (or no scaling).
+            et_reference_resample : {"nearest", "bilinear", "bicubic", None}
+                Reference ET resampling.  The default is None which is
+                equivalent to nearest neighbor resampling.
 
         Notes
         -----
@@ -62,17 +84,17 @@ class Image:
         self.image = image
 
         # Copy system properties
-        self._id = self.image.get("system:id")
-        self._index = self.image.get("system:index")
-        self._time_start = self.image.get("system:time_start")
-        self._properties = {
-            "system:index": self._index,
-            "system:time_start": self._time_start,
-            "image_id": self._id,
+        self.id = self.image.get("system:id")
+        self.index = self.image.get("system:index")
+        self.time_start = self.image.get("system:time_start")
+        self.properties = {
+            "system:index": self.index,
+            "system:time_start": self.time_start,
+            "image_id": self.id,
         }
         # Build SCENE_ID from the (possibly merged) system:index
-        scene_id = ee.List(ee.String(self._index).split("_")).slice(-3)
-        self._scene_id = (
+        scene_id = ee.List(ee.String(self.index).split("_")).slice(-3)
+        self.scene_id = (
             ee.String(scene_id.get(0))
             .cat("_")
             .cat(ee.String(scene_id.get(1)))
@@ -81,20 +103,22 @@ class Image:
         )
 
         # Build WRS2_TILE from the scene_id
-        self._wrs2_tile = (
-            ee.String("p").cat(self._scene_id.slice(5, 8)).cat("r").cat(self._scene_id.slice(8, 11))
+        self.wrs2_tile = (
+            ee.String("p").cat(self.scene_id.slice(5, 8)).cat("r").cat(self.scene_id.slice(8, 11))
         )
 
-        # Set server side date/time properties using the 'system:time_start'
-        self._date = ee.Date(self._time_start)
-        self._year = ee.Number(self._date.get("year"))
-        self._month = ee.Number(self._date.get("month"))
-        self._start_date = ee.Date(utils.date_to_time_0utc(self._date))
-        self._end_date = self._start_date.advance(1, "day")
-        self._doy = ee.Number(self._date.getRelative("day", "year")).add(1).int()
+        # Set server side date/time properties using the "system:time_start"
+        self.date = ee.Date(self.time_start)
+        self.year = ee.Number(self.date.get("year"))
+        self.month = ee.Number(self.date.get("month"))
+        self.start_date = ee.Date(utils.date_to_time_0utc(self.date))
+        self.end_date = self.start_date.advance(1, "day")
+        self.doy = ee.Number(self.date.getRelative("day", "year")).add(1).int()
 
         # Model input parameters
-        self._meteorology_source_daily = meteorology_source_daily
+        self.meteorology_source = meteorology_source
+        self.landcover_source = landcover_source
+        self.elevation_source = elevation_source
 
         # Reference ET parameters
         try:
@@ -123,14 +147,24 @@ class Image:
         if self.et_reference_resample and self.et_reference_resample.lower() not in resample_methods:
             raise ValueError("unsupported et_reference_resample method")
 
-        self.geometry = self.image.select(0).geometry()
         self.proj = self.image.select(0).projection()
         self.latlon = ee.Image.pixelLonLat().reproject(self.proj)
+        self.geometry = self.image.select(0).geometry()
         self.coords = self.latlon.select(["longitude", "latitude"])
 
         # Image projection and geotransform
         self.crs = image.projection().crs()
         self.transform = ee.List(ee.Dictionary(ee.Algorithms.Describe(image.projection())).get("transform"))
+
+        # CGM - Needed for running the tests
+        if latitude is None:
+            self.latitude = self.ndvi.multiply(0).add(ee.Image.pixelLonLat().select(["latitude"]))
+        elif utils.is_number(latitude):
+            self.latitude = ee.Image.constant(latitude)
+        elif isinstance(latitude, ee.computedobject.ComputedObject):
+            self.latitude = latitude
+        else:
+            raise ValueError("invalid lat parameter")
 
     @classmethod
     def from_image_id(cls, image_id, **kwargs):
@@ -140,7 +174,7 @@ class Image:
         ----------
         image_id : str
             An earth engine image ID.
-            (i.e. 'LANDSAT/LC08/C02/T1_L2/LC08_044033_20170716')
+            (i.e. "LANDSAT/LC08/C02/T1_L2/LC08_044033_20170716")
         kwargs
             Keyword arguments to pass through to model init.
 
@@ -348,30 +382,35 @@ class Image:
                 output_images.append(self.lst.float())
             elif v.lower() == "ndvi":
                 output_images.append(self.ndvi.float())
+            # CGM - The time and mask bands are needed for the interpolation
             elif v.lower() == "mask":
                 output_images.append(self.mask)
+            elif v.lower() == 'time':
+                output_images.append(self.time)
             else:
                 raise ValueError(f"unsupported variable: {v}")
 
-        return ee.Image(output_images).set(self._properties)
+        return ee.Image(output_images).set(self.properties)
 
     @lazy_property
     def et(self):
         """Compute RADET actual ET [mm day-1]"""
         et = model.et(
-            # image=self.image,
-            lai=self.lai,
-            lst=self.lst,
             albedo=self.albedo,
             emissivity=self.emissivity,
-            meteorology_source_daily=self._meteorology_source_daily,
-            time_start=self._time_start,
+            lai=self.lai,
+            lst=self.lst,
+            meteorology_source=self.meteorology_source,
+            landcover=self.landcover,
+            elevation=self.elevation,
+            time_start=self.time_start,
+            # TODO: Remove after testing
+            # proj=self.proj,
             # geometry_image=self.geometry,
-            proj=self.proj,
             # coords=self.coords,
         )
 
-        return et.rename("et").set(self._properties)
+        return et.rename("et").set(self.properties)
 
     @lazy_property
     def et_reference(self):
@@ -385,7 +424,7 @@ class Image:
             # Assume a string source is an image collection ID (not an image ID)
             et_reference_coll = (
                 ee.ImageCollection(self.et_reference_source)
-                .filterDate(self._start_date, self._end_date)
+                .filterDate(self.start_date, self.end_date)
                 .select([self.et_reference_band])
             )
             et_reference_img = ee.Image(et_reference_coll.first())
@@ -399,7 +438,7 @@ class Image:
         if self.et_reference_factor:
             et_reference_img = et_reference_img.multiply(self.et_reference_factor)
 
-        return et_reference_img.rename(["et_reference"]).set(self._properties)
+        return et_reference_img.rename(["et_reference"]).set(self.properties)
 
         # Map ETr values directly to the input (i.e. Landsat) image pixels
         # The benefit of this is the ETr image is now in the same crs as the
@@ -407,47 +446,109 @@ class Image:
         # Note, doing this will cause the reference ET to be cloud masked.
         # return (
         #     self.ndvi.multiply(0).add(et_reference_img)
-        #     .rename(["et_reference"]).set(self._properties)
+        #     .rename(["et_reference"]).set(self.properties)
         # )
 
     @lazy_property
     def et_fraction(self):
         """Fraction of reference ET (equivalent to the Kc)"""
-        return self.et.divide(self.et_reference).rename(["et_fraction"]).set(self._properties)
+        return self.et.divide(self.et_reference).rename(["et_fraction"]).set(self.properties)
 
     @lazy_property
     def albedo(self):
         """Albedo"""
-        return self.image.select(["albedo"]).set(self._properties)
+        return self.image.select(["albedo"]).set(self.properties)
 
     @lazy_property
     def emissivity(self):
         """Emissivity"""
-        return self.image.select(["emissivity"]).set(self._properties)
+        return self.image.select(["emissivity"]).set(self.properties)
 
     @lazy_property
     def lai(self):
         """Leaf area index (LAI)"""
-        return self.image.select(["lai"]).set(self._properties)
+        return self.image.select(["lai"]).set(self.properties)
 
     @lazy_property
     def lst(self):
         """Land surface temperature (LST)"""
-        return self.image.select(["lst"]).set(self._properties)
+        return self.image.select(["lst"]).set(self.properties)
 
     @lazy_property
     def ndvi(self):
         """Normalized difference vegetation index (NDVI)"""
-        return self.image.select(["ndvi"]).set(self._properties)
+        return self.image.select(["ndvi"]).set(self.properties)
 
     @lazy_property
     def ndwi(self):
         """Normalized difference water index (NDWI)"""
-        return self.image.select(["ndwi"]).set(self._properties)
+        return self.image.select(["ndwi"]).set(self.properties)
 
     # TODO: If the model does not do any additional masking we might be able to
     #   build the mask from the NDVI or QA band instead of the ET
+    # CGM - Had to switch to building the mask from ndvi to get the tests to pass
     @lazy_property
     def mask(self):
         """Mask of all active pixels (based on the final et)"""
-        return self.et.multiply(0).add(1).updateMask(1).uint8().rename(["mask"]).set(self._properties)
+        return self.ndvi.multiply(0).add(1).updateMask(1).uint8().rename(["mask"]).set(self.properties)
+        # return self.et.multiply(0).add(1).updateMask(1).uint8().rename(["mask"]).set(self.properties)
+
+    # CGM - This band shouldn't be needed but removing it is causing problems
+    @lazy_property
+    def time(self):
+        """Return an image of the 0 UTC time (in milliseconds)"""
+        return (
+            self.mask
+            .double().multiply(0).add(utils.date_to_time_0utc(self.date))
+            .rename(['time']).set(self.properties)
+        )
+
+    # TODO: Consider adding support for elevation image collections that are tiled (e.g. new 3DEP)
+    @lazy_property
+    def elevation(self):
+        """Elevation"""
+        if utils.is_number(self.elevation_source):
+            elev_img = ee.Image.constant(float(self.elevation_source))
+        elif isinstance(self.elevation_source, ee.computedobject.ComputedObject):
+            elev_img = self.elevation_source
+        elif type(self.elevation_source) is str:
+            elev_img = ee.Image(self.elevation_source)
+        else:
+            raise ValueError(f"Unsupported elevation_source: {self.elevation_source}\n")
+
+        return elev_img.select([0], ["elevation"])
+
+    @lazy_property
+    def landcover(self):
+        """Landcover"""
+        if utils.is_number(self.landcover_source):
+            lc_img = ee.Image.constant(int(self.landcover_source)).rename(["landcover"])
+            self.lc_type = "NLCD"
+        elif isinstance(self.landcover_source, ee.computedobject.ComputedObject):
+            # If the source is an ee.Image assume it is an NLCD image
+            lc_img = self.landcover_source.rename(["landcover"])
+            self.landcover_type = "NLCD"
+        elif re.match("projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER/Annual_NLCD_LndCov_\\d{4}_CU_\\w+",
+                      self.landcover_source, re.I):
+            # Assume an annual NLCD image ID was passed in and use it directly
+            lc_img = ee.Image(self.landcover_source).rename(["landcover"])
+            self.landcover_type = "NLCD"
+        elif self.landcover_source == "projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER":
+            # Select the closest year in time from the Annual NLCD image collection
+            # Hardcoding the year ranges for now but we might want to change this to
+            #   a more dynamic approach to allow for additional years to be added.
+            lc_coll = ee.ImageCollection(self.landcover_source)
+            lc_year = (
+                ee.Number(self.year)
+                .max(ee.Date(lc_coll.aggregate_min("system:time_start")).get("year"))
+                .min(ee.Date(lc_coll.aggregate_max("system:time_start")).get("year"))
+            )
+            lc_img = (
+                lc_coll.filter(ee.Filter.calendarRange(lc_year, lc_year, "year")).first()
+                .rename(["landcover"])
+            )
+            self.landcover_type = "NLCD"
+        else:
+            raise ValueError(f"Unsupported landcover_source: {self.landcover_source}\n")
+
+        return lc_img

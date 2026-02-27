@@ -593,8 +593,10 @@ class Collection:
             'collections': ', '.join(self.collections),
             'interp_days': interp_days,
             'interp_method': interp_method,
-            'model_name': metadata.metadata('openet-ptjpl')['Name'],
-            'model_version': metadata.metadata('openet-ptjpl')['Version'],
+            'model_name': metadata.metadata('radet')['Name'],
+            'model_version': metadata.metadata('radet')['Version'],
+            # 'model_name': metadata.metadata('openet-radet')['Name'],
+            # 'model_version': metadata.metadata('openet-radet')['Version'],
         }
         interp_properties.update(self.model_args)
 

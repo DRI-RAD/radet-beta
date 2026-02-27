@@ -1,5 +1,6 @@
 import logging
 import math
+import pprint
 
 import ee
 
@@ -11,24 +12,21 @@ SIG = 4.901e-9
 
 
 def et(
-    # image,
     lai,
     lst,
     albedo,
     emissivity,
-    meteorology_source_daily,
-    # elev_product,
+    meteorology_source,
+    landcover,
+    elevation,
     time_start,
-    # geometry_image,
-    proj,
-    # coords,
+    latitude=None,
+    # proj,
 ):
     """RADET Daily Evapotranspiration [mm day-1].
 
     Parameters
     ----------
-    image : ee.Image
-        Landsat image.
     lai : ee.Image
         Leaf Area index.
     lst : ee.Image
@@ -37,20 +35,16 @@ def et(
         Surface albedo.
     emissivity : ee.Image
         Broad-band surface emissivity.
-    meteorology_source_inst : ee.ImageCollection
-        Meteorological dataset [inst]
-    meteorology_source_daily : ee.ImageCollection
-        Meteorological dataset [daily]
-    elev_product : ee.Image
-        Elevation image [m].
+    meteorology_source : str
+        Meteorological dataset source collection ID.
+    landcover : str
+        Landcover image with NLCD classes.
+    elevation : ee.Image
+        Elevation [m].
+    latitude : ee.Image
+        Latitude [deg].
     time_start : str
         Image property: time start of the image.
-    geometry_image : ee.Geometry
-        Image geometry.
-    proj : ee.Image
-        Landsat image projection.
-    coords : ee.Image
-        Landsat image Latitude and longitude.
 
     Returns
     -------
@@ -65,38 +59,36 @@ def et(
     """
 
     # TODO: check if time_start local time affects calculations. (BC: Don't think so)
-    # TODO: check with CM if ancillary elev and lat images are really needed.
 
+    # TODO: Move all of the meteorology processing outside of this function
+    #   so that srad, tmin, etc are passed in as inputs to the function
     # Meteorological data
     # Only accepts GridMET for now
     # TODO: add ERA5-Land compatibility
-    if meteorology_source_daily == "IDAHO_EPSCOR/GRIDMET":
-        srad, tminK, tmaxK, qa, u10 = meteorology_gridmet(
-            time_start,
-            meteorology_source_daily,
-        )
-        lat = ee.Image("projects/openet/assets/meteorology/gridmet/ancillary/latitude")
-        # elev = ee.Image("projects/openet/assets/meteorology/gridmet/ancillary/elevation")
+    if meteorology_source == "IDAHO_EPSCOR/GRIDMET":
+        srad, tminK, tmaxK, qa, u10 = meteorology_gridmet(time_start, meteorology_source)
 
-    # elif (meteorology_source_daily == "projects/openet/assets/meteorology/era5land/na/daily") or (
-    #     meteorology_source_daily == "projects/openet/assets/meteorology/era5land/sa/daily"
+        # CGM: Could rename to something like "elev_meteorology" or "meteorology_elev"
+        elevation_coarse = ee.Image("projects/openet/assets/meteorology/gridmet/ancillary/elevation")
+        latitude_coarse = ee.Image("projects/openet/assets/meteorology/gridmet/ancillary/latitude")
+
+    # elif (meteorology_source == "projects/openet/assets/meteorology/era5land/na/daily") or (
+    #     meteorology_source == "projects/openet/assets/meteorology/era5land/sa/daily"
     # ):
-    #     tmin, tmax, tair, ux, rh, rso24h, tfac = meteorology_era5land(
-    #         time_start,
-    #         meteorology_source_daily,
-    #     )
+    #     tmin, tmax, tair, ux, rh, rso24h, tfac = meteorology_era5land(time_start, meteorology_source)
 
     else:
         raise ValueError("Error: wrong daily or instant met data source assigned.")
 
+    if latitude is None:
+        latitude = ee.Image.pixelLonLat().select(['latitude'])
+
     #################################
     # Meteorological variables
     #################################
-    # Elevation image
-    elev = ee.Image("USGS/SRTMGL1_003")
 
     # Air pressure (kPa)
-    PA = ee.Image().expression("101.3 * ((293 - 0.0065 * elev) / 293) ** 5.26", {"elev": elev})
+    PA = ee.Image().expression("101.3 * ((293 - 0.0065 * elev) / 293) ** 5.26", {"elev": elevation})
 
     # Psychrometric constant
     gamma = ee.Image().expression("PA * 0.000665", {"PA": PA})
@@ -110,11 +102,8 @@ def et(
     ###################################################
     # temperature variables after lapse rate correction
     ##################################################
-    # GridMET Elevation image
-    elev_gridmet = ee.Image("projects/openet/assets/meteorology/gridmet/ancillary/elevation")
-    
-    tmaxK_cor = add_lapse_correction(tmaxK, elev, elev_gridmet)
-    tmninK_cor = add_lapse_correction(tminK, elev, elev_gridmet)
+    tmaxK_cor = add_lapse_correction(tmaxK, elevation, elevation_coarse)
+    tmninK_cor = add_lapse_correction(tminK, elevation, elevation_coarse)
 
     # average air temperature (K)
     t_avg = tmninK_cor.add(tmaxK_cor).multiply(0.5)
@@ -132,16 +121,16 @@ def et(
     # Clear Sky terms and slope shade correction
     ############################################
     # Clear-Sky terms
-    Rs_MJ, Ra_MJ, fcd, sunrise_ts = clear_sky_terms(time_start, lat, elev, srad)
+    Rs_MJ, Ra_MJ, fcd, sunrise_ts = clear_sky_terms(time_start, latitude, elevation, srad)
 
     # surface shortwave correction based on shade effect (Allen et al., 2006)
-    Rs_MJ_cor = terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elev, time_start, albedo)
+    Rs_MJ_cor = terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elevation, time_start, albedo)
     
     ############################################
     # Other variables indepedent to mu terms
     ############################################
     # land cover mask
-    del_LC, water = wet_mask(time_start,lai)
+    del_LC, water = wet_mask(landcover, time_start, lai)
 
     # transmissivity 
     tauL, tauS, fc = transmissivities(lai)
@@ -152,6 +141,7 @@ def et(
     # Daily mean LST 
     LST_avg = daily_avg_lst(tmninK_cor, lst, sunrise_ts, t_avg)
 
+    # TODO: Switch to a number calculation instead of an image expression
     # soil conductive exchange coefficient
     gg = ee.Image().expression("1000 * ((pi / 86400) ** 0.5) * 86400 / (10 ** 6)", {"pi": pi})
 
@@ -165,7 +155,7 @@ def et(
     RHs = ea.divide(esat)
         
     # soil and canopy LST
-    LST_canopy, LST_soil= canopy_and_soil_LST(
+    LST_canopy, LST_soil = canopy_and_soil_LST(
         LST_avg, t_avg, Rs_MJ_cor, Rld_MJ, fc, tauS, tauL, mu_c, mu_s, RHs, DELTA, gamma, emissivity, albedo
     )
 
@@ -208,7 +198,11 @@ def et(
     # Penman aerodynamic term
     Ea = aerodynamic_term(del_LC, fc, LST_soil, RHs, gamma, DELTA, u2, esat, ea)
 
-    return ee.Image(ET_DIF.add(Ea).rename("ET")).setDefaultProjection(proj)
+    return ee.Image(ET_DIF.add(Ea).rename("ET"))
+
+    # # CGM - If you adjust the order of operations in DIF_model() you can keep
+    # #   a reference to the original image projection and don't need to reset it here
+    # return ee.Image(ET_DIF.add(Ea).rename("ET")).setDefaultProjection(proj)
 
 
 def transmissivities(lai):
@@ -219,20 +213,26 @@ def transmissivities(lai):
     
     return tauL, tauS, fc
 
-    
-def wet_mask(time_start, lai):
+
+# TODO: Add support for passing in remap lists, or remap the values in image.py
+def wet_mask(landcover_source, time_start, lai):
     """"""
     # USGS NLCD land cover 
     # Load land cover image
 
-    YEAR = ee.Number(ee.Date(time_start).get("year"))
-    landcover = ee.ImageCollection("projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER")
-    landcover_img = landcover.filter(ee.Filter.eq("year", YEAR)).first()
-    # TODO: Switch to server call similar to how SSEBop gets the last NLCD year
-    if landcover_img.getInfo() is None:
-        landcover_img = landcover.sort("year", False).first()
-        land_cover_year = landcover_img.get("year").getInfo()
-        logger.info(f"No NLCD data for year {YEAR.getInfo()}. Using closest available year: {land_cover_year}.")
+    landcover_coll = ee.ImageCollection(landcover_source)
+    landcover_year = (
+        ee.Number(ee.Date(time_start).get("year"))
+        .max(ee.Date(landcover_coll.aggregate_min('system:time_start')).get('year'))
+        .min(ee.Date(landcover_coll.aggregate_max('system:time_start')).get('year'))
+    )
+    landcover_date = ee.Date.fromYMD(landcover_year, 1, 1)
+    landcover_img = (
+        landcover_coll.filterDate(landcover_date, landcover_date.advance(1, 'year'))
+        .first().select([0])
+        .set({'landcover_year': landcover_year})
+    )
+
     water = landcover_img.remap([11], [1], 0).eq(1)
 
     # Define wet surfaces
@@ -379,13 +379,23 @@ def mu_terms(Rnc, Rnci, DELTA, gamma, AEs, AEsi, RHs):
 
 def DIF_model(gamma, DELTA, Rnc, AEs, RHs, mu_c, mu_s):
     """"""
+    # CGM - Changing the order of operations so that Rnc is the first image used
+    #   will allow the output image to have the original Landsat image projection
+    #   and remove the need for setting the default projection
     return (
-        ee.Image().expression(
-            "(DELTA / (DELTA + gamma * mu_c) * Rnc + RHs * DELTA / (RHs * DELTA + gamma * mu_s) * AEs) / 2.45",
+        Rnc.expression(
+            "(Rnc * DELTA / (DELTA + gamma * mu_c) + RHs * DELTA / (RHs * DELTA + gamma * mu_s) * AEs) / 2.45",
             {"gamma": gamma, "DELTA": DELTA, "Rnc": Rnc, "AEs": AEs, "RHs": RHs, "mu_c": mu_c, "mu_s": mu_s},
         )
         .max(0).rename("ET_DIF")
     )
+    # return (
+    #     ee.Image().expression(
+    #         "(DELTA / (DELTA + gamma * mu_c) + RHs * DELTA / (RHs * DELTA + gamma * mu_s) * AEs) / 2.45",
+    #         {"gamma": gamma, "DELTA": DELTA, "Rnc": Rnc, "AEs": AEs, "RHs": RHs, "mu_c": mu_c, "mu_s": mu_s},
+    #     )
+    #     .max(0).rename("ET_DIF")
+    # )
 
 
 def aerodynamic_term(del_LC, fc, LST_soil, RHs, gamma, DELTA, u2, esat, ea):
@@ -410,24 +420,20 @@ def aerodynamic_term(del_LC, fc, LST_soil, RHs, gamma, DELTA, u2, esat, ea):
 
 def Rld_atm_ASCE(emissivity, fcd, ea, t_avg):
     """"""
-    Rld = ee.Image().expression(
+    return ee.Image().expression(
         "emissivity * SIG * (1 - fcd * (0.34 - 0.14 * ea ** 0.5)) * t_avg ** 4",
         {"emissivity": emissivity, "SIG": SIG, "fcd": fcd, "ea": ea, "t_avg": t_avg}
     ).rename("Rld")
-    return Rld
 
 
-def add_lapse_correction(ta, elev, elev_gridmet):
-    zGrid = elev_gridmet
-    zPix  = elev
+def add_lapse_correction(ta, elev, elev_coarse):
+    """"""
+    lapse_corr = elev.subtract(elev_coarse).multiply(-0.0065)
 
-    lapse_corr = zPix.subtract(zGrid).multiply(-0.0065)
-    t_corrected = ta.add(lapse_corr).rename("t_corrected")
-
-    return t_corrected
+    return ta.add(lapse_corr).rename("t_corrected")
 
 
-def meteorology_gridmet(time_start, meteorology_source_daily):
+def meteorology_gridmet(time_start, meteorology_source):
     """
 
     Parameters
@@ -436,7 +442,7 @@ def meteorology_gridmet(time_start, meteorology_source_daily):
         Image property: time start of the image.
     meteorology_source_inst: ee.ImageCollection, str
         Instantaneous meteorological data.
-    meteorology_source_daily :  ee.ImageCollection, str
+    meteorology_source :  ee.ImageCollection, str
         Daily meteorological data.
 
     Returns
@@ -454,7 +460,7 @@ def meteorology_gridmet(time_start, meteorology_source_daily):
 
     # Filtering Daily data
     meteorology_daily = (
-        ee.ImageCollection(meteorology_source_daily)
+        ee.ImageCollection(meteorology_source)
         .filterDate(ee.Date(time_start).advance(-1, "day"), ee.Date(time_start))
         .first()
     )
