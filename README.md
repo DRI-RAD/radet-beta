@@ -84,8 +84,8 @@ radet-beta/
 
 ## Installation
 
-```
-pip install earthengine-api openet-core pandas
+```bash
+pip install git+https://github.com/DRI-RAD/radet-beta.git
 ```
 
 ### Google Earth Engine Authentication
