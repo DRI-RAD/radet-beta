@@ -80,7 +80,8 @@ radet-beta/
 
 - [earthengine-api](https://github.com/google/earthengine-api) # main RADET model dependency
 - [openet-core](https://pypi.org/project/openet-core/) # main RADET model dependency
-- [pandas](https://pypi.org/project/pandas/) # For example notebooks
+- [pandas](https://pypi.org/project/pandas/) # For example notebooks (optional)
+- [notebook](https://pypi.org/project/notebook/) # For example notebooks (optional)
 
 ## Installation
 
