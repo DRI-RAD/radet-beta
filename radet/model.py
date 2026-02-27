@@ -366,14 +366,20 @@ def isothermal_net_radiation(Rnc, AEs, tauL, emissivity, t_avg, gg, LST_canopy, 
 
 def mu_terms(Rnc, Rnci, DELTA, gamma, AEs, AEsi, RHs):
     """"""
+
+    Rnc_safe = Rnc.max(0.001)
+    AEs_safe = AEs.max(0.001)
+    Rnci_safe = Rnci.max(Rnc_safe)
+    AEsi_safe = AEsi.max(AEs_safe)
+    
     mu_c = ee.Image().expression(
         "(Rnci + sqrt(Rnci ** 2 + 4 * DELTA / gamma * Rnc * (Rnci - Rnc))) / (2 * Rnc)",
-        {"Rnc": Rnc, "Rnci": Rnci, "DELTA": DELTA, "gamma": gamma}
+        {"Rnc": Rnc_safe, "Rnci": Rnci_safe, "DELTA": DELTA, "gamma": gamma}
     ).max(1).rename("mu_c")
 
     mu_s = ee.Image().expression(
         "(AEsi + sqrt(AEsi ** 2 + 4 * RHs * DELTA / gamma * AEs * (AEsi - AEs))) / (2 * AEs)",
-        {"AEs": AEs, "AEsi": AEsi, "DELTA": DELTA, "gamma": gamma, "RHs": RHs}
+        {"AEs": AEs_safe, "AEsi": AEsi_safe, "DELTA": DELTA, "gamma": gamma, "RHs": RHs}
     ).max(1).rename("mu_s")
 
     return mu_c, mu_s
