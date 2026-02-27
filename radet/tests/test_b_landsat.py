@@ -17,16 +17,13 @@ SCENE_DATE = SCENE_DT.strftime('%Y-%m-%d')
 SCENE_TIME = utils.millis(SCENE_DT)
 
 
-def sr_image(ub=0.0, blue=0.2, green=0.2, red=0.2, nir=0.7, swir1=0.2, swir2=0.2, bt=300, qa_pixel=0):
-    """Construct a fake Landsat 8 image with renamed bands"""
+def sr_image(blue=0.2, green=0.2, red=0.2, nir=0.7, swir1=0.2, swir2=0.2, bt=300, qa_pixel=0):
+    # Construct a fake Landsat 8 image with renamed bands
+    # Excluding the ultra_blue band since it is not currently being used in the model
     return (
-        ee.Image.constant([ub, blue, green, red, nir, swir1, swir2, bt, qa_pixel])
-        .rename(['ultra_blue', 'blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'tir', 'QA_PIXEL'])
-        .set({
-            'system:time_start': ee.Date(SCENE_DATE).millis(),
-            'k1_constant': ee.Number(607.76),
-            'k2_constant': ee.Number(1260.56),
-        })
+        ee.Image.constant([blue, green, red, nir, swir1, swir2, bt, qa_pixel])
+        .rename(['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'tir', 'QA_PIXEL'])
+        .set({'system:time_start': ee.Date(SCENE_DATE).millis()})
     )
 
 
@@ -45,6 +42,17 @@ def test_Image_evi2_band_name():
         [0.2, 0.2, 0.0],
         [0.1, 0.9, 0.93],
         [0.001, 0.999, 1.25],
+        # Check negative reflectance values
+        [-0.01, 0.1, 0.26],
+        [0.1, -0.01, 0],
+        [-0.01, 0.0, 0.03],
+        [0.0, -0.01, 0],
+        [-0.1, -0.1, 0],
+        # Check saturated reflectance values
+        # TODO: Check calculation for saturated reflectance values
+        [1.1, 1.1, 0.0],
+        [0.9, 1.1, 0.12],
+        [1.1, 0.9, 0],
     ]
 )
 def test_Image_evi2_calculation(red, nir, expected, tol=0.01):
@@ -60,11 +68,20 @@ def test_Image_ndmi_scaled_band_name():
 @pytest.mark.parametrize(
     'nir, swir1, expected',
     [
+        [0.2, 0.4, 0.0],
+        [0.2, 0.3, 0.33],
+        [0.2, 0.25, 0.63],
+        [0.7, 0.2, 1.0],
         [0.0, 0.0, 1.0],
-        [0.1, 0.9, 0.0],
-        [0.7, 0.1, 1.0],
-        [0.9, 0.1, 1.0],
-        # [0.0, 0.1, ],
+        # Check negative reflectance values
+        [-0.01, 0.1, 1.0],
+        [0.1, -0.01, 1.0],
+        [-0.01, 0.0, 1.0],
+        [0.0, -0.01, 1.0],
+        # Check saturated reflectance values
+        [1.1, 1.1, 1.0],
+        [0.9, 1.1, 0.67],
+        [1.1, 0.9, 1.0],
     ]
 )
 def test_Image_ndmi_scaled_calculation(nir, swir1, expected, tol=0.01):
@@ -87,6 +104,14 @@ def test_Image_lai_band_name():
         [0.01, 0.99, 0.01, 7.79],
         [0.001, 0.999, 0.001, 8.0],
         [0.1, 0.1, 0.9, 0.0],
+        # Check negative reflectance values
+        [-0.01, 0.1, 0.1, 1.09],
+        [0.1, -0.01, 0.1, 0.18],
+        [0.1, 0.1, -0.01, 0.18],
+        # Check saturated reflectance values
+        [1.1, 0.9, 0.9, 0.18],
+        [0.9, 1.1, 0.9, 0.33],
+        [0.9, 0.9, 1.1, 0.12],
     ]
 )
 def test_Image_lai_calculation(red, nir, swir1, expected, tol=0.01):
@@ -112,18 +137,14 @@ def test_Image_ndvi_band_name():
         [0.2, 0.8, 0.6],
         [0.1, 17.0 / 30, 0.7],
         [0.2, 0.7, 0.55555555],
-        # TODO: Modify NDVI to vetter handle negative and very low values
-        # # Check that negative values are not masked
-        # [-0.01, 0.1, 1.0],
-        # [0.1, -0.01, -1.0],
-        # # Check that low values are set to 0
-        # [-0.1, -0.1, 0.0],
-        # [0.0, 0.0, 0.0],
-        # [0.009, 0.009, 0.0],
-        # [0.009, -0.01, 0.0],
-        # [-0.01, 0.009, 0.0],
-        # # Don't adjust NDVI if only one reflectance value is low
-        # [0.005, 0.1, 0.9047619104385376],
+        # NDVI is not being used in the model so extreme values are okay for now
+        # Check negative reflectance values
+        [-0.01, 0.1, 0],
+        [0.1, -0.01, 0],
+        # Check saturated reflectance values
+        [1.1, 1.1, 0],
+        [0.9, 1.1, 0.1],
+        [1.1, 0.9, -0.1],
     ]
 )
 def test_Image_ndvi_calculation(red, nir, expected, tol=0.000001):
@@ -142,6 +163,14 @@ def test_Image_ndwi_band_name():
         [0.2, 0.2, 0.0],
         [0.2, 0.7, -0.56],
         [0.7, 0.2, 0.56],
+        # NDWI is not being used in the model so extreme values are okay for now
+        # Check negative reflectance values
+        [-0.01, 0.1, 0],
+        [0.1, -0.01, 0],
+        # Check saturated reflectance values
+        [1.1, 1.1, 0],
+        [0.9, 1.1, -0.1],
+        [1.1, 0.9, 0.1],
     ]
 )
 def test_Image_ndwi_calculation(green, nir, expected, tol=0.01):
@@ -149,26 +178,32 @@ def test_Image_ndwi_calculation(green, nir, expected, tol=0.01):
     assert abs(output['ndwi'] - expected) <= tol
 
 
-# TODO: Add test
-# def test_landsat_c2_qa_water_mask():
-#     output = landsat_c2_qa_water_mask()
-#     return False
+@pytest.mark.parametrize(
+    'qa_pixel,  expected',
+    [
+        ['0000000010000000', 1],
+        ['0000000000000000', 0],
+    ]
+)
+def test_landsat_c2_qa_water_mask(qa_pixel, expected):
+    output = utils.constant_image_value(
+        landsat.landsat_c2_qa_water_mask(sr_image(qa_pixel=int(qa_pixel, 2)))
+    )
+    assert output['qa_water'] == expected
 
 
 def test_Image_albedo_disalexi_band_name():
-    output = landsat.albedo_disalexi(sr_image()).getInfo()['bands'][0]['id']
-    assert output == 'albedo'
+    assert landsat.albedo_disalexi(sr_image()).getInfo()['bands'][0]['id'] == 'albedo'
 
 
 @pytest.mark.parametrize(
     'blue, green, red, nir, swir1, swir2, expected',
     [
-        # [0.2, 0.2, 0.2, 0.7, 0.2, 0.2, 0.3555],
         [0.2, 0.2, 0.2, 0.7, 0.2, 0.2, 0.3879],
-        [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2],
+        [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2014],
     ]
 )
-def test_Image_albedo_disalexi_calculation(blue, green, red, nir, swir1, swir2, expected, tol=0.01):
+def test_Image_albedo_disalexi_calculation(blue, green, red, nir, swir1, swir2, expected, tol=0.0001):
     output = utils.constant_image_value(landsat.albedo_disalexi(
         sr_image(blue=blue, green=green, red=red, nir=nir, swir1=swir1, swir2=swir2)
     ))
@@ -176,7 +211,12 @@ def test_Image_albedo_disalexi_calculation(blue, green, red, nir, swir1, swir2, 
 
 
 def test_Image_albedo_l89_band_name():
-    output = landsat.albedo_l89(sr_image()).getInfo()['bands'][0]['id']
+    # The test sr_image object is built without the ultra_blue band
+    #   that is needed for this albedo calculation
+    output = (
+        landsat.albedo_l89(sr_image().addBands(ee.Image.constant([0]).rename('ultra_blue')))
+        .getInfo()['bands'][0]['id']
+    )
     assert output == 'albedo'
 
 
@@ -186,31 +226,107 @@ def test_Image_albedo_l89_band_name():
         [0.2, 0.2, 0.2, 0.2, 0.7, 0.2, 0.2, 0.3403],
     ]
 )
-def test_Image_albedo_l89_calculation(ub, blue, green, red, nir, swir1, swir2, expected, tol=0.000001):
+def test_Image_albedo_l89_calculation(ub, blue, green, red, nir, swir1, swir2, expected, tol=0.0001):
+    # The test sr_image object is built without the ultra_blue band
+    #   that is needed for this albedo calculation
     output = utils.constant_image_value(landsat.albedo_l89(
-        sr_image(ub=ub, blue=blue, green=green, red=red, nir=nir, swir1=swir1, swir2=swir2)
+        sr_image(blue=blue, green=green, red=red, nir=nir, swir1=swir1, swir2=swir2)
+        .addBands(ee.Image.constant([ub]).rename('ultra_blue'))
     ))
     assert abs(output['albedo'] - expected) <= tol
 
 
-# def test_Image_albedo_l457_band_name():
-#     output = landsat.albedo_l457(sr_image()).getInfo()['bands'][0]['id']
-#     assert output == 'albedo'
+def test_Image_albedo_l457_band_name():
+    assert landsat.albedo_l457(sr_image()).getInfo()['bands'][0]['id'] == 'albedo'
 
 
-# TODO: Add test
-# def test_cloud_mask_sr_l457():
-#     output = cloud_mask_sr_l457()
-#     return False
+@pytest.mark.parametrize(
+    'ub, blue, green, red, nir, swir1, swir2, expected',
+    [
+        [0.2, 0.2, 0.2, 0.2, 0.7, 0.2, 0.2, 0.3555],
+    ]
+)
+def test_Image_albedo_l457_calculation(ub, blue, green, red, nir, swir1, swir2, expected, tol=0.0001):
+    output = utils.constant_image_value(landsat.albedo_l457(
+        sr_image(blue=blue, green=green, red=red, nir=nir, swir1=swir1, swir2=swir2)
+    ))
+    assert abs(output['albedo'] - expected) <= tol
 
 
-# TODO: Add test
-# def test_cloud_mask_sr_l8():
-#     output = cloud_mask_sr_l8()
-#     return False
+@pytest.mark.parametrize(
+    'qa_pixel, expected',
+    [
+        # This cloud mask function returns 1 for non-masked pixels
+        #   so that the output can be passed directly to an updateMask call
+        # These are the two values that are not masked
+        # All other combinations of bits will be masked
+        ['0001010101000000', 1],  # Clear sky (5440)
+        ['0001010110000000', 1],  # Water (5504)
+        # Check the individual bits
+        ['0000000000000000', 0],
+        ['0000000000000001', 0],
+        ['0000000000000010', 0],  # Dilate bit
+        ['0000000000000100', 0],  # Cirrus bit
+        ['0000000000001000', 0],  # Cloud bit
+        ['0000000000010000', 0],  # Shadow bit
+        ['0000000001000000', 0],  # Snow bit`
+        ['0000000010000000', 0],  # Water bit`
+    ]
+)
+def test_cloud_mask_C2_l457(qa_pixel, expected):
+    output = utils.constant_image_value(
+        landsat.cloud_mask_C2_l457(sr_image(qa_pixel=int(qa_pixel, 2)))
+    )
+    assert output['QA_PIXEL'] == expected
 
 
-# TODO: Add test
-# def test_water_mask():
-#     output = water_mask()
-#     return False
+@pytest.mark.parametrize(
+    'qa_pixel, expected',
+    [
+        # This cloud mask function returns 1 for non-masked pixels
+        #   so that the output can be passed directly to an updateMask call
+        # These are the two values that are not masked
+        # All other combinations of bits will be masked
+        ['0101010101000000', 1],  # Clear sky (21824)
+        ['0101010111000000', 1],  # Water (21952)
+        # Check the individual bits
+        ['0000000000000000', 0],
+        ['0000000000000001', 0],
+        ['0000000000000010', 0],  # Dilate bit
+        ['0000000000000100', 0],  # Cirrus bit
+        ['0000000000001000', 0],  # Cloud bit
+        ['0000000000010000', 0],  # Shadow bit
+        ['0000000001000000', 0],  # Snow bit`
+        ['0000000010000000', 0],  # Water bit`
+    ]
+)
+def test_cloud_mask_C2_l89(qa_pixel, expected):
+    output = utils.constant_image_value(
+        landsat.cloud_mask_C2_l89(sr_image(qa_pixel=int(qa_pixel, 2)))
+    )
+    assert output['QA_PIXEL'] == expected
+
+
+@pytest.mark.parametrize(
+    'product, xy, expected',
+    [
+        # These water masks primarily identify ocean the great lakes
+        ['GLO', [-120.0, 39.0], 0],
+        ['GLO', [-121.0, 39.0], 0],
+        ['GLO', [-125.0, 39.0], 1],
+        ['OSM', [-120.0, 39.0], 0],
+        ['OSM', [-121.0, 39.0], 0],
+        ['OSM', [-125.0, 39.0], 1],
+        # Check that lower case values are supported
+        ['glo', [-125.0, 39.0], 1],
+        ['osm', [-125.0, 39.0], 1],
+    ]
+)
+def test_water_mask(product, xy, expected):
+    output = utils.point_image_value(landsat.water_mask(product), xy, scale=10)
+    assert output['water_mask'] == expected
+
+
+def test_Image_meteorology_source_sources_exception():
+    with pytest.raises(ValueError):
+        utils.getinfo(landsat.water_mask(product=''))

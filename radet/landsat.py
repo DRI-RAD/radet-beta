@@ -41,7 +41,7 @@ def ndmi_scaled(landsat_image):
 
     """
     return (
-        ee.Image(landsat_image).normalizedDifference(["nir","swir1"])
+        ee.Image(landsat_image).normalizedDifference(["nir", "swir1"])
         .unmask(0).add(0.3).divide(0.3).clamp(0, 1)
         .rename("ndmi_scaled")
     )
@@ -313,7 +313,7 @@ def cloud_mask_C2_l457(landsat_image):
     Notes
     -----
     clear sky value = 5440  (0001010101000000)
-    water value = 5504   (0001010110000000)
+    water value     = 5504  (0001010110000000)
 
     References
     ----------
@@ -341,8 +341,8 @@ def cloud_mask_C2_l89(landsat_image):
 
     Notes
     -----
-    clear sky value = 21824  (0001010101000000)
-    water value = 21952   (0001010110000000)
+    clear sky value = 21824  (0101010101000000)
+    water value     = 21952  (0001010110000000)
 
     References
     ----------
@@ -357,11 +357,11 @@ def cloud_mask_C2_l89(landsat_image):
 
 
 def water_mask(product="GLO"):
-    """Water maskfor precomputing
+    """Water mask for precomputing
 
     Parameters
     ----------
-    product : string
+    product : {'GLO', 'OSM'}
         Product name. 
             GLO: Water mask from the Copernicus GLO DEM.
             OSM: Water mask from OpenStreetMap.
@@ -372,7 +372,7 @@ def water_mask(product="GLO"):
 
     Notes
     -----
-   
+    These water masks are primarily intended for masking ocean and the Great Lakes
 
     References
     ----------
@@ -380,12 +380,11 @@ def water_mask(product="GLO"):
     OSM: https://gee-community-catalog.org/projects/osm_water/
 
     """
-    if product =="GLO":
-
+    if product.upper() == "GLO":
         water_mask = ee.Image("projects/openet/assets/features/water_mask_glo30_0p001")
-
-    elif product =="OSM":
-
+    elif product.upper() == "OSM":
         water_mask = ee.Image("projects/openet/assets/features/water_mask_osm_0p001")
+    else:
+        raise ValueError(f'unsupported water mask product type: {product}')
 
-    return water_mask
+    return water_mask.rename('water_mask')
