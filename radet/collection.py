@@ -1,5 +1,5 @@
 import copy
-import datetime
+from datetime import datetime, timedelta
 from importlib import metadata
 # import pprint
 
@@ -376,20 +376,20 @@ class Collection:
 
         # Adjust start/end dates based on t_interval
         # Increase the date range to fully include the time interval
-        start_dt = datetime.datetime.strptime(self.start_date, '%Y-%m-%d')
-        end_dt = datetime.datetime.strptime(self.end_date, '%Y-%m-%d')
+        start_dt = datetime.strptime(self.start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(self.end_date, '%Y-%m-%d')
         if t_interval.lower() == 'monthly':
-            start_dt = datetime.datetime(start_dt.year, start_dt.month, 1)
+            start_dt = datetime(start_dt.year, start_dt.month, 1)
             end_dt -= relativedelta(days=+1)
-            end_dt = datetime.datetime(end_dt.year, end_dt.month, 1)
+            end_dt = datetime(end_dt.year, end_dt.month, 1)
             end_dt += relativedelta(months=+1)
         start_date = start_dt.strftime('%Y-%m-%d')
         end_date = end_dt.strftime('%Y-%m-%d')
 
         # The start/end date for the interpolation include more days
         # (+/- interp_days) than are included in the reference ET collection
-        interp_start_dt = start_dt - datetime.timedelta(days=interp_days)
-        interp_end_dt = end_dt + datetime.timedelta(days=interp_days)
+        interp_start_dt = start_dt - timedelta(days=interp_days)
+        interp_end_dt = end_dt + timedelta(days=interp_days)
         interp_start_date = interp_start_dt.date().isoformat()
         interp_end_date = interp_end_dt.date().isoformat()
 

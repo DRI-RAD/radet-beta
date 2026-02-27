@@ -1,6 +1,4 @@
-import datetime
-# import logging
-# import pprint
+from datetime import datetime, timedelta
 
 import ee
 import pytest
@@ -14,10 +12,10 @@ import radet.utils as utils
 # TODO: Try moving to conftest and/or make a fixture
 COLL_ID = 'LANDSAT/LC08/C02/T1_L2/'
 SCENE_ID = 'LC08_044033_20170716'
-SCENE_DT = datetime.datetime.strptime(SCENE_ID[-8:], '%Y%m%d')
+SCENE_DT = datetime.strptime(SCENE_ID[-8:], '%Y%m%d')
 SCENE_DATE = SCENE_DT.strftime('%Y-%m-%d')
 SCENE_DOY = int(SCENE_DT.strftime('%j'))
-SCENE_0UTC_DT = datetime.datetime.strptime(SCENE_DATE, '%Y-%m-%d')
+SCENE_0UTC_DT = datetime.strptime(SCENE_DATE, '%Y-%m-%d')
 SCENE_TIME = 1500230731090
 # TEST_POINT = (-121.5265, 38.7399)
 TEST_POINT = [-120.113, 36.336]
@@ -150,8 +148,7 @@ def test_Image_init_date_properties():
     assert utils.getinfo(m.year) == int(SCENE_DATE.split('-')[0])
     assert utils.getinfo(m.month) == int(SCENE_DATE.split('-')[1])
     assert utils.getinfo(m.start_date)['value'] == utils.millis(SCENE_0UTC_DT)
-    assert utils.getinfo(m.end_date)['value'] == utils.millis(
-        SCENE_0UTC_DT + datetime.timedelta(days=1))
+    assert utils.getinfo(m.end_date)['value'] == utils.millis(SCENE_0UTC_DT + timedelta(days=1))
     assert utils.getinfo(m.doy) == SCENE_DOY
 
 

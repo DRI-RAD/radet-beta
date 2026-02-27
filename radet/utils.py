@@ -1,5 +1,5 @@
 import calendar
-import datetime
+from datetime import datetime
 import logging
 from time import sleep
 
@@ -44,8 +44,8 @@ def c_to_k(image):
     Returns
     -------
     ee.Image
-    """
 
+    """
     return image.add(273.15)
 
 
@@ -59,12 +59,9 @@ def date_to_time_0utc(date):
     Returns
     -------
     ee.Number
-    """
 
+    """
     return ee.Date.fromYMD(date.get('year'), date.get('month'), date.get('day')).millis()
-    # Extra operations are needed since update() does not set milliseconds to 0.
-    # return date.update(hour=0, minute=0, second=0).millis()\
-    #     .divide(1000).floor().multiply(1000)
 
 
 # TODO: Import from openet.core.utils instead of defining here
@@ -102,7 +99,7 @@ def point_coll_value(coll, xy, scale=1):
         col_dict[k] = i + 4
         info_dict[k] = {}
     for row in output[1:]:
-        date = datetime.datetime.utcfromtimestamp(row[3] / 1000.0).strftime('%Y-%m-%d')
+        date = datetime.utcfromtimestamp(row[3] / 1000.0).strftime('%Y-%m-%d')
         for k, v in col_dict.items():
             info_dict[k][date] = row[col_dict[k]]
 
@@ -128,15 +125,15 @@ def millis(input_dt):
     Returns
     -------
     int
-    """
 
+    """
     return 1000 * int(calendar.timegm(input_dt.timetuple()))
 
 
 def valid_date(date_str, date_fmt='%Y-%m-%d'):
     """Check if a datetime can be built from a date string and if it is valid"""
     try:
-        datetime.datetime.strptime(date_str, date_fmt)
+        datetime.strptime(date_str, date_fmt)
         return True
     except Exception as e:
         return False
