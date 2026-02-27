@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 
 import ee
 import pytest
@@ -12,38 +12,12 @@ import radet.utils as utils
 # TODO: Try moving to conftest and/or make a fixture
 SCENE_ID = 'LC08_044033_20170716'
 # SCENE_ID = 'LC08_042035_20150713'
-SCENE_DT = datetime.datetime.strptime(SCENE_ID[-8:], '%Y%m%d')
+SCENE_DT = datetime.strptime(SCENE_ID[-8:], '%Y%m%d')
 SCENE_DATE = SCENE_DT.strftime('%Y-%m-%d')
 SCENE_TIME = utils.millis(SCENE_DT)
 
 
-# def sr_image(ub=0.0, blue=0.2, green=0.2, red=0.2, nir=0.7, swir1=0.2, swir2=0.2, bt=300, qa_pixel=0):
-#     """Construct a fake Landsat 8 image with renamed bands"""
-#     return (
-#         ee.Image.constant([ub, blue, green, red, nir, swir1, swir2, bt, qa_pixel])
-#         .rename(['ultra_blue', 'blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'tir', 'QA_PIXEL'])
-#         .set({
-#             'system:time_start': ee.Date(SCENE_DATE).millis(),
-#             'k1_constant': ee.Number(607.76),
-#             'k2_constant': ee.Number(1260.56),
-#         })
-#     )
 
-
-# def test_meteorology_gridmet():
-#     # time_start, meteorology_source
-#     output = model.meteorology_gridmet()
-#     # srad, tminK, tmaxK, qa, u10
-#     assert False
-#
-#
-# def test_meteorology_era5land():
-#     # time_start, meteorology_source
-#     output = model.meteorology_era5land()
-#     # [tmin, tmax, tair_c, wind_med, rh, rso_inst, swdown24h, tfac]
-#     assert False
-#
-#
 # def test_transmissivities():
 #     lai =
 #     output = model.transmissivities(lai)
@@ -176,6 +150,6 @@ def test_DIF_model(gamma, DELTA, Rnc, AEs, RHs, mu_c, mu_s, expected, tol=0.0001
 
 
 # TODO: Check that a ValueError is raised for invalid daily meteorology sources
-# def test_Image_meteorology_source_daily_sources_exception():
+# def test_Image_meteorology_source_sources_exception():
 #     with pytest.raises(ValueError):
-#         utils.getinfo(model.et(meteorology_source_daily='').et)
+#         utils.getinfo(model.et(meteorology_source='').et)
