@@ -1,0 +1,36 @@
+[project]
+name = "radet"
+version = "0.1.0"
+authors = [
+    { name = "Yeonuk Kim", email = "yeonuk.kim@dri.edu" },
+]
+description = "Earth Engine implementation of the RADET model"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["RADET", "OpenET", "Earth Engine", "Evapotranspiration", "Landsat"]
+license = {text = "Apache-2.0"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "earthengine-api >= 1.5.2",
+    "openet-core >= 0.7.0",
+    "openet-refet-gee >= 0.6.2",
+    "python-dateutil",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/DRI-RAD/radet-beta"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+exclude = ["docs*", "examples*", "build*", "dist*", "*.egg-info*"]
+
