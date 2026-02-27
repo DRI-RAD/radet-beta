@@ -1,6 +1,6 @@
 # RADET - beta
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
 [![GEE](https://img.shields.io/badge/Google%20Earth%20Engine-4285F4?logo=google-earth&logoColor=white)](https://earthengine.google.com/)
 ![Status](https://img.shields.io/badge/Status-Beta-yellow)
@@ -80,6 +80,7 @@ radet-beta/
 
 - [earthengine-api](https://github.com/google/earthengine-api) # main RADET model dependency
 - [openet-core](https://pypi.org/project/openet-core/) # main RADET model dependency
+- [openet-refet-gee](https://pypi.org/project/openet-refet-gee/) # main RADET model dependency
 - [pandas](https://pypi.org/project/pandas/) # For example notebooks (optional)
 - [notebook](https://pypi.org/project/notebook/) # For example notebooks (optional)
 
