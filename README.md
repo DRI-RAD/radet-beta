@@ -17,7 +17,7 @@ The primary component of the RADET model is the Image() class. The Image class c
 
 ## Input Collections
 
-RADET-beta can currently be computed for Landsat Collection 2 Level 2 (SR/ST) images  images from the following Earth Engine image collections:
+RADET can currently be computed for Landsat Collection 2 Level 2 (SR/ST) images from the following Earth Engine image collections:
 
  * LANDSAT/LT05/C02/T1_L2
  * LANDSAT/LE07/C02/T1_L2
@@ -39,13 +39,13 @@ The input Landsat image must have the following bands and properties:
 
 | Property          | Description |
 |-------------------|-------------|
-| `system:index`    | - Landsat Scene ID<br>- Must be in Earth Engine format (e.g. `LC08_044033_20170716`)<br>- Used to lookup the scene-specific c-factor |
+| `system:index`    | - Landsat Scene ID<br>- Must be in Earth Engine format (e.g. `LC08_044033_20170716`) |
 | `system:time_start` | Image datetime in milliseconds since 1970 |
 | `SPACECRAFT_ID`   | - Used to determine Landsat sensor type<br>- Must be one of: `LANDSAT_5`, `LANDSAT_7`, `LANDSAT_8`, `LANDSAT_9` |
 
 ### Model Output
 
-The primary output of the RADET-beta is the actual ET (ETa) in millimeters.
+The primary output of the RADET model is the actual ET (ETa) in millimeters.
 
 ### Examples
 
@@ -64,6 +64,7 @@ radet-beta/
 │   ├── image.py           # Core Image class for single ET computation
 │   ├── interpolate.py     # Temporal interpolation utilities
 │   ├── landsat.py         # Landsat-specific preprocessing
+│   ├── meteorology.py     # Meteorology-specific preprocessing
 │   ├── model.py           # RADET model implementation
 │   └── utils.py           # Helper functions
 ├── examples/
