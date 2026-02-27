@@ -59,8 +59,6 @@ class Image:
             Elevation source keyword or asset.
             The default is "USGS/SRTMGL1_003".
             Units must be in meters.
-        latitude : ee.Image, ee.Number, optional
-            Latitude [deg].  If not set will default to ee.Image.pixelLonLat().
         kwargs : dict, optional
             et_reference_source : str, float
                 Reference ET source (the default is None).
@@ -74,6 +72,8 @@ class Image:
             et_reference_resample : {"nearest", "bilinear", "bicubic", None}
                 Reference ET resampling.  The default is None which is
                 equivalent to nearest neighbor resampling.
+            latitude : ee.Image, ee.Number, float, optional
+                Latitude [deg].  If not set will default to ee.Image.pixelLonLat().
 
         Notes
         -----
@@ -141,34 +141,33 @@ class Image:
         # Check reference ET parameters
         if self.et_reference_factor and not utils.is_number(self.et_reference_factor):
             raise ValueError("et_reference_factor must be a number")
-        if self.et_reference_factor and self.et_reference_factor < 0:
+        if self.et_reference_factor and (self.et_reference_factor < 0):
             raise ValueError("et_reference_factor must be greater than zero")
         resample_methods = ["nearest", "bilinear", "bicubic"]
-        if self.et_reference_resample and self.et_reference_resample.lower() not in resample_methods:
+        if self.et_reference_resample and (self.et_reference_resample.lower() not in resample_methods):
             raise ValueError("unsupported et_reference_resample method")
 
-        self.proj = self.image.select(0).projection()
-        self.latlon = ee.Image.pixelLonLat().reproject(self.proj)
-        self.geometry = self.image.select(0).geometry()
-        self.coords = self.latlon.select(["longitude", "latitude"])
-
         # Image projection and geotransform
-        self.crs = image.projection().crs()
+        self.proj = self.image.select([0]).projection()
+        self.crs = self.image.select([0]).projection().crs()
         self.transform = ee.List(ee.Dictionary(ee.Algorithms.Describe(image.projection())).get("transform"))
+        self.geometry = self.image.select([0]).geometry()
+        # self.latlon = ee.Image.pixelLonLat().reproject(self.proj)
+        # self.coords = self.latlon.select(["longitude", "latitude"])
 
         # CGM - Needed for running the tests
-        if latitude is None:
-            self.latitude = self.ndvi.multiply(0).add(ee.Image.pixelLonLat().select(["latitude"]))
-        elif utils.is_number(latitude):
+        if ("latitude" not in kwargs.keys()) or (not kwargs["latitude"]):
+            self.latitude = self.lai.multiply(0).add(ee.Image.pixelLonLat().select(["latitude"]))
+        elif utils.is_number(kwargs["latitude"]):
             self.latitude = ee.Image.constant(latitude)
-        elif isinstance(latitude, ee.computedobject.ComputedObject):
+        elif isinstance(kwargs["latitude"], ee.computedobject.ComputedObject):
             self.latitude = latitude
         else:
-            raise ValueError("invalid lat parameter")
+            raise ValueError("invalid latitude parameter")
 
     @classmethod
     def from_image_id(cls, image_id, **kwargs):
-        """Constructs an RADET Image instance from an image ID
+        """Constructs a RADET Image instance from an image ID
 
         Parameters
         ----------
@@ -181,10 +180,9 @@ class Image:
         Returns
         -------
         new instance of Image class
+
         """
 
-        # DEADBEEF - Should the supported image collection IDs and helper
-        # function mappings be set in a property or method of the Image class?
         collection_methods = {
             "LANDSAT/LT04/C02/T1_L2": "from_landsat_c2_sr",
             "LANDSAT/LT05/C02/T1_L2": "from_landsat_c2_sr",
@@ -220,6 +218,7 @@ class Image:
         Returns
         -------
         Image
+
         """
 
         sr_image = ee.Image(sr_image)
@@ -229,6 +228,8 @@ class Image:
 
         # Rename bands to generic names
         # CGM - Intentionally letting these lines be long to improve readability
+        #   If the plan long term is to use the DisALEXI albedo calculation
+        #   then we could remove the ultra_blue band and greatly simplify this section
         input_bands = ee.Dictionary(
             {
                 "LANDSAT_4": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "ST_B6", "QA_PIXEL", "ST_EMIS"],
@@ -292,11 +293,6 @@ class Image:
             landsat.cloud_mask_C2_l89(sr_image),
             landsat.cloud_mask_C2_l457(sr_image),
         )
-        # cloud_mask = ee.Algorithms.If(
-        #     spacecraft_id.compareTo(ee.String("LANDSAT_8")),
-        #     landsat.cloud_mask_C2_l457(sr_image),
-        #     landsat.cloud_mask_C2_l89(sr_image)
-        # )
 
         # Water mask
         water_mask = landsat.water_mask(product="GLO")
@@ -368,6 +364,7 @@ class Image:
         Returns
         -------
         ee.Image
+
         """
 
         output_images = []
