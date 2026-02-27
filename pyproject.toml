@@ -29,6 +29,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
+notebooks = ["pandas", "notebook"]
 test = ["pytest"]
 
 [tool.setuptools.packages.find]

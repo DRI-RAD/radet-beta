@@ -21,3 +21,4 @@ dist/
 
 # MacOS
 .DS_Store
+.vscode

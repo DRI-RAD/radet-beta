@@ -84,9 +84,42 @@ radet-beta/
 
 ## Installation
 
+### 1. Download and Install Anaconda/Miniconda
+
+Either [Anaconda](https://www.anaconda.com/products/individual) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) is required for managing Python packages (Python >= 3.10 recommended).
+
+**Windows users:** After installation, open Anaconda Prompt and run `conda init powershell` to add conda to PowerShell.
+
+**Linux/Mac users:** Ensure conda is added to your PATH (typically automatic). Restart your shell if needed.
+
+Update conda: `conda update conda`
+
+### 2. Create the Conda Environment
+
+Create and activate a new conda environment:
+
 ```bash
-pip install git+https://github.com/DRI-RAD/radet-beta.git
+conda create -y -n radet python=3.12
+conda activate radet
 ```
+
+Navigate to the `radet-beta` directory and install the package:
+
+```bash
+cd /path/to/radet-beta
+```
+
+**Option A** — Install the core RADET model only:
+```bash
+pip install -e .
+```
+
+**Option B** — Install with notebook dependencies (includes `pandas`):
+```bash
+pip install -e .[notebooks]
+```
+
+> **Note:** Use Option B if you plan to run the [example notebooks](examples/).
 
 ### Google Earth Engine Authentication
 
