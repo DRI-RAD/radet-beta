@@ -407,7 +407,7 @@ def aerodynamic_term(del_LC, fc, LST_soil, RHs, gamma, DELTA, u2, esat, ea):
     )
 
     del_water = ee.Image().expression(
-        "fc + (1 - fc) * (RHs ** (esat_soil - esat_soil * RHs)) / (1 + exp(10 - LST_soil))",
+        "fc + (1 - fc) * (RHs ** (esat_soil - esat_soil * RHs)) / (1 + exp(10 - LST_soil + 273.15))",
         {"fc":fc, "RHs":RHs, "esat_soil":esat_LST_soil, "LST_soil":LST_soil}
     )
     
