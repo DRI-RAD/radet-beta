@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import ee
 import pytest
 
-import radet as radet
+import radet as model
 import radet.utils as utils
 # TODO: import utils from openet.core
 # import openet.core.utils as utils
@@ -17,7 +17,6 @@ SCENE_DATE = SCENE_DT.strftime('%Y-%m-%d')
 SCENE_DOY = int(SCENE_DT.strftime('%j'))
 SCENE_0UTC_DT = datetime.strptime(SCENE_DATE, '%Y-%m-%d')
 SCENE_TIME = 1500230731090
-# TEST_POINT = (-121.5265, 38.7399)
 TEST_POINT = [-120.113, 36.336]
 SUN_ELEVATION = 64.27935371
 
@@ -60,11 +59,14 @@ def default_image_args(
         lst=300,
         ndvi=0.8,
         ndwi=-0.5,
-        meteorology_source='IDAHO_EPSCOR/GRIDMET',
-        landcover=81,
-        elevation=100,
+        temperature_source=300,
+        humidity_source=0.007,
+        windspeed_source=4,
+        solar_radiation_source=350,
+        landcover_source=81,
+        elevation_source=100,
         latitude=36,
-        # longitude=-120,
+        longitude=-120,
         et_reference_source=10,
         et_reference_band='eto',
         et_reference_factor=1.0,
@@ -74,11 +76,14 @@ def default_image_args(
         'image': default_image(
             albedo=albedo, emissivity=emissivity, lai=lai, lst=lst, ndvi=ndvi, ndwi=ndwi
         ),
-        'meteorology_source': meteorology_source,
-        'landcover': landcover,
-        'elevation': elevation,
+        'temperature_source': temperature_source,
+        'humidity_source': humidity_source,
+        'windspeed_source': windspeed_source,
+        'solar_radiation_source': solar_radiation_source,
+        'landcover_source': landcover_source,
+        'elevation_source': elevation_source,
         'latitude': latitude,
-        # 'longitude': longitude,
+        'longitude': longitude,
         'et_reference_source': et_reference_source,
         'et_reference_band': et_reference_band,
         'et_reference_factor': et_reference_factor,
@@ -93,28 +98,34 @@ def default_image_obj(
         lst=300,
         ndvi=0.8,
         ndwi=-0.5,
-        meteorology_source='IDAHO_EPSCOR/GRIDMET',
-        landcover=81,
-        elevation=100,
+        temperature_source=300,
+        humidity_source=0.007,
+        windspeed_source=4,
+        solar_radiation_source=350,
+        landcover_source=81,
+        elevation_source=100,
         latitude=36,
-        # longitude=-120,
-        et_reference_source=15,
-        et_reference_band='etr',
-        et_reference_factor=0.85,
+        longitude=-120,
+        et_reference_source=10,
+        et_reference_band='eto',
+        et_reference_factor=1.0,
         et_reference_resample='nearest',
 ):
-    return radet.Image(**default_image_args(
+    return model.Image(**default_image_args(
         albedo=albedo,
         emissivity=emissivity,
         lai=lai,
         lst=lst,
         ndvi=ndvi,
         ndwi=ndwi,
-        meteorology_source=meteorology_source,
-        landcover=landcover,
-        elevation=elevation,
+        temperature_source=temperature_source,
+        humidity_source=humidity_source,
+        windspeed_source=windspeed_source,
+        solar_radiation_source=solar_radiation_source,
+        landcover_source=landcover_source,
+        elevation_source=elevation_source,
         latitude=latitude,
-        # longitude=longitude,
+        longitude=longitude,
         et_reference_source=et_reference_source,
         et_reference_band=et_reference_band,
         et_reference_factor=et_reference_factor,
@@ -123,8 +134,11 @@ def default_image_obj(
 
 
 def test_Image_init_default_parameters():
-    m = radet.Image(default_image())
-    assert m.meteorology_source == 'IDAHO_EPSCOR/GRIDMET'
+    m = model.Image(default_image())
+    assert m.temperature_source == 'IDAHO_EPSCOR/GRIDMET'
+    assert m.humidity_source == 'IDAHO_EPSCOR/GRIDMET'
+    assert m.windspeed_source == 'IDAHO_EPSCOR/GRIDMET'
+    assert m.solar_radiation_source == 'IDAHO_EPSCOR/GRIDMET'
     # assert m.et_reference_source is None
     # assert m.et_reference_band is None
     # assert m.et_reference_factor is None
@@ -135,7 +149,7 @@ def test_Image_init_default_parameters():
 
 # Todo: Break these up into separate functions?
 def test_Image_init_calculated_properties():
-    m = radet.Image(default_image())
+    m = model.Image(default_image())
     assert utils.getinfo(m.time_start) == SCENE_TIME
     # assert m.scene_id.getInfo() == SCENE_ID
     # assert m.wrs2_tile.getInfo() == 'p{}r{}'.format(
@@ -143,7 +157,7 @@ def test_Image_init_calculated_properties():
 
 
 def test_Image_init_date_properties():
-    m = radet.Image(default_image())
+    m = model.Image(default_image())
     assert utils.getinfo(m.date)['value'] == SCENE_TIME
     assert utils.getinfo(m.year) == int(SCENE_DATE.split('-')[0])
     assert utils.getinfo(m.month) == int(SCENE_DATE.split('-')[1])
@@ -152,12 +166,11 @@ def test_Image_init_date_properties():
     assert utils.getinfo(m.doy) == SCENE_DOY
 
 
-# CGM - scene_id is not currently being used in the model
-# def test_Image_init_scene_id_property():
-#     """Test that the system:index from a merged collection is parsed"""
-#     input_img = default_image()
-#     m = radet.Image(input_img.set('system:index', '1_2_' + SCENE_ID))
-#     assert utils.getinfo(m.scene_id) == SCENE_ID
+def test_Image_init_scene_id_property():
+    """Test that the system:index from a merged collection is parsed"""
+    input_img = default_image()
+    m = model.Image(input_img.set('system:index', '1_2_' + SCENE_ID))
+    assert utils.getinfo(m.scene_id) == SCENE_ID
 
 
 @pytest.mark.parametrize('variable', ['albedo', 'emissivity', 'lai', 'lst', 'ndvi', 'ndwi'])
@@ -172,22 +185,35 @@ def test_Image_init_variable_properties(variable):
 
 
 @pytest.mark.parametrize(
-    'meteorology_source, xy, expected',
+    'source, xy, expected',
     [
-        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 7.77],
-        # ['projects/openet/assets/meteorology/era5land/na/daily', TEST_POINT, 1080.6605],
+        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 293.8],
     ]
 )
-def test_Image_meteorology_source_sources(meteorology_source, xy, expected, tol=0.01):
-    """Test daily meteorology source ET values for a single date at a real point"""
-    m = default_image_obj(meteorology_source=meteorology_source)
-    output = utils.point_image_value(ee.Image(m.et), xy, scale=30)
-    assert abs(output['et'] - expected) <= tol
+def test_Image_temperature_source(source, xy, expected, tol=0.001):
+    output = utils.point_image_value(model.Image(default_image(), temperature_source=source).tmin, xy)
+    assert abs(output['tmin'] - expected) <= tol
 
 
-def test_Image_meteorology_source_sources_exception():
+def test_Image_temperature_source_exception():
     with pytest.raises(ValueError):
-        utils.getinfo(default_image_obj(meteorology_source='').et)
+        utils.getinfo(model.Image(default_image(), temperature_source=None).tmin)
+
+
+@pytest.mark.parametrize(
+    'source, xy, expected',
+    [
+        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 3.4],
+    ]
+)
+def test_Image_windspeed_source_values(source, xy, expected, tol=0.001):
+    output = utils.point_image_value(model.Image(default_image(), windspeed_source=source).u10, xy)
+    assert abs(output['u10'] - expected) <= tol
+
+
+def test_Image_windspeed_source_exception():
+    with pytest.raises(ValueError):
+        utils.getinfo(model.Image(default_image(), windspeed_source=None).u10)
 
 
 @pytest.mark.parametrize(
@@ -200,20 +226,20 @@ def test_Image_meteorology_source_sources_exception():
         [2364.351, TEST_POINT, 2364.351],
     ]
 )
-def test_Image_elevation_source(source, xy, expected, tol=0.001):
+def test_Image_elevation_source_values(source, xy, expected, tol=0.001):
     output = utils.point_image_value(
-        radet.Image(default_image(), elevation_source=source).elevation, xy
+        model.Image(default_image(), elevation_source=source).elevation, xy
     )
     assert abs(output['elevation'] - expected) <= tol
 
 
-# def test_Image_elevation_source_exception():
-#     with pytest.raises(ValueError):
-#         utils.getinfo(disalexi.Image(default_image(), elevation_source='').elevation)
+def test_Image_elevation_source_exception():
+    with pytest.raises(ValueError):
+        utils.getinfo(model.Image(default_image(), elevation_source=None).elevation)
 
 
 def test_Image_elevation_band_name():
-    output = utils.getinfo(radet.Image(default_image()).elevation)['bands'][0]['id']
+    output = utils.getinfo(model.Image(default_image()).elevation)['bands'][0]['id']
     assert output == 'elevation'
 
 
@@ -225,20 +251,15 @@ def test_Image_elevation_band_name():
             TEST_POINT, 82
         ],
         ['projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER', TEST_POINT, 82],
-        # CGM - Not currently support using the old NLCD collections
-        # ['USGS/NLCD_RELEASES/2021_REL/NLCD/2021', TEST_POINT, 82],
-        # ['USGS/NLCD_RELEASES/2021_REL/NLCD', TEST_POINT, 82],
-        # ['USGS/NLCD_RELEASES/2019_REL/NLCD', TEST_POINT, 82],
-        # ['USGS/NLCD_RELEASES/2019_REL/NLCD/2016', TEST_POINT, 82],
         # CGM - This one causes ee.Initialization errors
         # [ee.Image('USGS/SRTMGL1_003').multiply(0).add(82), TEST_POINT, 82],
         ['82', TEST_POINT, 82],
         [82, TEST_POINT, 82],
     ]
 )
-def test_Image_landcover_source(source, xy, expected, tol=0.001):
+def test_Image_landcover_source_values(source, xy, expected, tol=0.001):
     output = utils.point_image_value(
-        radet.Image(default_image(), landcover_source=source).landcover, xy
+        model.Image(default_image(), landcover_source=source).landcover, xy
     )
     assert abs(output['landcover'] - expected) <= tol
 
@@ -252,13 +273,13 @@ def test_Image_landcover_source(source, xy, expected, tol=0.001):
         'USGS/NLCD_RELEASES/2019_REL/NLCD/',
     ]
 )
-def test_Image_landcover_source_invalid(source):
+def test_Image_landcover_source_exception(source):
     with pytest.raises(ValueError):
-        utils.getinfo(radet.Image(default_image(), landcover_source=source).landcover)
+        utils.getinfo(model.Image(default_image(), landcover_source=source).landcover)
 
 
 def test_Image_landcover_band_name():
-    output = utils.getinfo(radet.Image(default_image()).landcover)['bands'][0]['id']
+    output = utils.getinfo(model.Image(default_image()).landcover)['bands'][0]['id']
     assert output == 'landcover'
 
 
@@ -347,8 +368,7 @@ def test_Image_et_properties():
     assert output['properties']['image_id'] == COLL_ID + SCENE_ID
 
 
-@pytest.mark.xfail(reason="constant_image_value calls won't work with gridded meteorology")
-def test_Image_et_defaults(expected=6.128, tol=0.001):
+def test_Image_et_defaults(expected=7.629, tol=0.001):
     output = utils.constant_image_value(ee.Image(default_image_obj().et))
     assert abs(output['et'] - expected) <= tol
 
@@ -430,7 +450,6 @@ def test_Image_calculate_variables_all():
     assert set([x['id'] for x in output['bands']]) == variables
 
 
-@pytest.mark.xfail(reason="constant_image_value calls won't work with gridded meteorology")
 def test_Image_calculate_values():
     """Test if the calculate method returns values"""
     output_img = default_image_obj().calculate(['et'])
@@ -445,7 +464,7 @@ def test_Image_calculate_variables_valueerror():
 
 def test_Image_from_landsat_c2_sr_default_image():
     """Test that the classmethod is returning a class object"""
-    output = radet.Image.from_landsat_c2_sr(
+    output = model.Image.from_landsat_c2_sr(
         ee.Image('LANDSAT/LC08/C02/T1_L2/LC08_038031_20130828')
         # 'LANDSAT/LC08/C02/T1_L2/LC08_038031_20130828'
     )
@@ -455,7 +474,7 @@ def test_Image_from_landsat_c2_sr_default_image():
 @pytest.mark.parametrize(
     'image_id',
     [
-        'LANDSAT/LT04/C02/T1_L2/LT04_044033_19830812',
+        # 'LANDSAT/LT04/C02/T1_L2/LT04_044033_19830812',
         'LANDSAT/LT05/C02/T1_L2/LT05_044033_20110716',
         'LANDSAT/LE07/C02/T1_L2/LE07_044033_20170708',
         'LANDSAT/LC08/C02/T1_L2/LC08_044033_20170716',
@@ -464,7 +483,7 @@ def test_Image_from_landsat_c2_sr_default_image():
 )
 def test_Image_from_landsat_c2_sr_landsat_image(image_id):
     """Test instantiating the class from a real Landsat images"""
-    output = utils.getinfo(radet.Image.from_landsat_c2_sr(ee.Image(image_id)).ndvi)
+    output = utils.getinfo(model.Image.from_landsat_c2_sr(ee.Image(image_id)).lai)
     assert output['properties']['system:index'] == image_id.split('/')[-1]
 
 
@@ -472,10 +491,9 @@ def test_Image_from_landsat_c2_sr_exception():
     """Test instantiating the class for an invalid image ID"""
     with pytest.raises(Exception):
         # Intentionally using .getInfo() since utils.getinfo() might catch the exception
-        radet.Image.from_landsat_c2_sr(ee.Image('FOO')).ndvi.getInfo()
+        model.Image.from_landsat_c2_sr(ee.Image('FOO')).lai.getInfo()
 
 
-@pytest.mark.xfail(reason="constant_image_value calls won't work with gridded meteorology")
 def test_Image_from_landsat_c2_sr_scaling():
     """Test if Landsat SR images images are being scaled"""
     sr_img = ee.Image('LANDSAT/LC08/C02/T1_L2/LC08_044033_20170716')
@@ -484,22 +502,28 @@ def test_Image_from_landsat_c2_sr_scaling():
         .rename(['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7',
                  'ST_B10', 'QA_PIXEL', 'QA_RADSAT', 'ST_EMIS'])
         .set({'SPACECRAFT_ID': ee.String(sr_img.get('SPACECRAFT_ID')),
-              'SUN_ELEVATION': ee.String(sr_img.get('SUN_ELEVATION')),
               'system:id': ee.String(sr_img.get('system:id')),
               'system:index': ee.String(sr_img.get('system:index')),
               'system:time_start': ee.Number(sr_img.get('system:time_start'))})
     )
 
-    # LST correction and cloud score masking do not work with a constant image
-    #   and must be explicitly set to False
-    output = utils.constant_image_value(radet.Image.from_landsat_c2_sr(
-        input_img, c2_lst_correct=False,
+    # LST correction, ocean masking, and cloud score masking
+    #   do not work with a constant image and must be explicitly set to False
+    # Other source inputs must be set to constant values
+    output = utils.constant_image_value(model.Image.from_landsat_c2_sr(
+        input_img, c2_lst_correct=False, mask_ocean_flag=False,
+        latitude=36, longitude=-120, landcover_source=81, elevation_source=100,
+        temperature_source=300, humidity_source=0.007, windspeed_source=4,
+        solar_radiation_source=350,
         # cloudmask_args={'cloud_score_flag': False, 'filter_flag': False}
     ).albedo)
     assert abs(output['albedo'] - 0.1) <= 0.01
 
-    output = utils.constant_image_value(radet.Image.from_landsat_c2_sr(
-        input_img, c2_lst_correct=False,
+    output = utils.constant_image_value(model.Image.from_landsat_c2_sr(
+        input_img, c2_lst_correct=False, mask_ocean_flag=False,
+        latitude=36, longitude=-120, landcover_source=81, elevation_source=100,
+        temperature_source=300, humidity_source=0.007, windspeed_source=4,
+        solar_radiation_source=350,
         # cloudmask_args={'cloud_score_flag': False, 'filter_flag': False}
     ).lst)
     assert abs(output['lst'] - 300) <= 0.1
@@ -507,7 +531,7 @@ def test_Image_from_landsat_c2_sr_scaling():
 
 # def test_Image_from_landsat_c2_sr_cloud_mask_args():
 #     """Test if the cloud_mask_args parameter can be set (not if it works)"""
-#     output = radet.Image.from_landsat_c2_sr(
+#     output = model.Image.from_landsat_c2_sr(
 #         'LANDSAT/LC08/C02/T1_L2/LC08_044033_20170716',
 #         cloudmask_args={'snow_flag': True, 'cirrus_flag': True}
 #     )
@@ -516,7 +540,7 @@ def test_Image_from_landsat_c2_sr_scaling():
 #
 # def test_Image_from_landsat_c2_sr_cloud_score_mask_arg():
 #     """Test if the cloud_score_flag parameter can be set in cloudmask_args"""
-#     output = radet.Image.from_landsat_c2_sr(
+#     output = model.Image.from_landsat_c2_sr(
 #         'LANDSAT/LC08/C02/T1_L2/LC08_044033_20170716',
 #         cloudmask_args={'cloud_score_flag': True, 'cloud_score_pct': 50})
 #     assert type(output) == type(default_image_obj())
@@ -524,7 +548,7 @@ def test_Image_from_landsat_c2_sr_scaling():
 
 def test_Image_from_landsat_c2_sr_c2_lst_correct_arg():
     """Test if the c2_lst_correct parameter can be set (not if it works)"""
-    output = radet.Image.from_landsat_c2_sr(
+    output = model.Image.from_landsat_c2_sr(
         'LANDSAT/LC08/C02/T1_L2/LC08_031034_20160702', c2_lst_correct=True)
     assert type(output) == type(default_image_obj())
 
@@ -536,10 +560,10 @@ def test_Image_from_landsat_c2_sr_c2_lst_correct_fill():
 
     # CGM - Is the uncorrected test needed?
     uncorrected = utils.point_image_value(
-        radet.Image.from_landsat_c2_sr(image_id, c2_lst_correct=False).lst, xy)
+        model.Image.from_landsat_c2_sr(image_id, c2_lst_correct=False).lst, xy)
     assert uncorrected['lst'] is None
     corrected = utils.point_image_value(
-        radet.Image.from_landsat_c2_sr(image_id, c2_lst_correct=True).lst, xy)
+        model.Image.from_landsat_c2_sr(image_id, c2_lst_correct=True).lst, xy)
     assert corrected['lst'] > 0
     # # Exact test values copied from openet-core
     # assert abs(corrected['lst'] - 306.83) <= 0.25
@@ -554,13 +578,13 @@ def test_Image_from_landsat_c2_sr_c2_lst_correct_fill():
 )
 def test_Image_from_image_id(image_id):
     """Test instantiating the class using the from_image_id method"""
-    output = utils.getinfo(radet.Image.from_image_id(image_id).ndvi)
+    output = utils.getinfo(model.Image.from_image_id(image_id).lai)
     assert output['properties']['system:index'] == image_id.split('/')[-1]
     assert output['properties']['image_id'] == image_id
 
 
 # def test_Image_from_method_kwargs():
 #     """Test that the init parameters can be passed through the helper methods"""
-#     assert radet.Image.from_landsat_c2_sr(
+#     assert model.Image.from_landsat_c2_sr(
 #         'LANDSAT/LC08/C02/T1_L2/LC08_042035_20150713',
 #         ea_source='FOO').ea_source == 'FOO'

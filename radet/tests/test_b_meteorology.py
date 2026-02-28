@@ -9,36 +9,32 @@ import radet.utils as utils
 # import openet.core.utils as utils
 
 
-# # TODO: Try moving to conftest and/or make a fixture
-# SCENE_ID = 'LC08_044033_20170716'
-# # SCENE_ID = 'LC08_042035_20150713'
-# SCENE_DT = datetime.strptime(SCENE_ID[-8:], '%Y%m%d')
-# SCENE_DATE = SCENE_DT.strftime('%Y-%m-%d')
-# SCENE_TIME = utils.millis(SCENE_DT)
+@pytest.mark.parametrize(
+    'source, xy, expected',
+    [
+        ['IDAHO_EPSCOR/GRIDMET', [-120.113, 36.336], 90.0],
+        ['GRIDMET', [-120.113, 36.336], 90.0],
+        # ['IDAHO_EPSCOR/GRIDMET', [-106.03249, 37.17777], 2402.9],
+        # ['GRIDMET', [-106.03249, 37.17777], 2402.9],
+    ]
+)
+def test_elevation(source, xy, expected, scale=4000, tol=0.1):
+    output = meteorology.elevation(source=source).rename('elevation')
+    assert abs(utils.point_image_value(output, xy, scale)['elevation'] - expected) <= tol
 
 
 @pytest.mark.parametrize(
-    'date, xy, scale, expected',
+    'date, xy, variable, expected',
     [
-        # CGM - Arbitrary test values just to make sure function is returning something reasonable
-        [
-            '2017-07-16', [-106.03249, 37.17777], 4000,
-            {'srad': 196.8, 'tmmn': 281.8, 'tmmx': 297.3, 'sph': 0.01041, 'vs': 2.4}
-        ],
+        ['2017-07-16', [-120.113, 36.336], 'tmin', 292.7],
+        ['2017-07-16', [-120.113, 36.336], 'tmax', 312.2],
+        ['2017-07-16', [-120.113, 36.336], 'qa', 0.00723],
+        ['2017-07-16', [-120.113, 36.336], 'u10', 4.3],
+        ['2017-07-16', [-120.113, 36.336], 'srad', 351.2],
     ]
 )
-def test_meteorology_gridmet(date, xy, scale, expected, tol=0.001):
-    time_start = utils.millis(datetime.strptime(date, '%Y-%m-%d'))
-    srad, tmin, tmax, qa, u10 = meteorology.gridmet(time_start=time_start)
-    assert abs(utils.point_image_value(srad, xy, scale)['srad'] - expected['srad']) <= tol
-    assert abs(utils.point_image_value(tmin, xy, scale)['tmmn'] - expected['tmmn']) <= tol
-    assert abs(utils.point_image_value(tmax, xy, scale)['tmmx'] - expected['tmmx']) <= tol
-    assert abs(utils.point_image_value(qa, xy, scale)['sph'] - expected['sph']) <= tol
-    assert abs(utils.point_image_value(u10, xy, scale)['vs'] - expected['vs']) <= tol
-
-
-# def test_meteorology_era5land():
-#     # time_start, meteorology_source
-#     output = meteorology.era5land()
-#     # [tmin, tmax, tair_c, wind_med, rh, rso_inst, swdown24h, tfac]
-#     assert False
+def test_gridmet(variable, date, xy, expected, scale=4000, tol=0.001):
+    output = meteorology.gridmet(
+        variable=variable, time_start=utils.millis(datetime.strptime(date, '%Y-%m-%d'))
+    )
+    assert abs(utils.point_image_value(output, xy, scale)[variable] - expected) <= tol

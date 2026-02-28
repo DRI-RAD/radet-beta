@@ -55,21 +55,18 @@ def test_wet_mask(landcover, lai, wet, water):
 
 
 # def test_clear_sky_terms():
-#     # time_start, lat, elev, srad
 #     output = model.clear_sky_terms(time_start, lat, elev, srad)
 #     # Rs_MJ, Ra_MJ, fcd, sunrise_ts
 #     assert False
 
 
 # def test_daily_avg_lst():
-#     # tminK, lst, sunrise_ts, t_avg
 #     output = model.daily_avg_lst(tminK, lst, sunrise_ts, t_avg)
 #     # LST_max.add(LST_min).multiply(0.5).max(t_avg)
 #     assert False
 
 
 # def test_canopy_and_soil_LST():
-#     # LST_avg, t_avg, Rs_MJ, Rld_MJ, fc, tauS, tauL, mu_c, mu_s, RHs, DELTA, gamma, emissivity, albedo
 #     output = model.canopy_and_soil_LST(
 #         LST_avg, t_avg, Rs_MJ, Rld_MJ, fc, tauS, tauL, mu_c, mu_s, RHs, DELTA, gamma, emissivity, albedo
 #     )
@@ -78,28 +75,24 @@ def test_wet_mask(landcover, lai, wet, water):
 
 
 # def test_RHs_model():
-#     # ea, esat, DELTA, LST_soil, t_avg, mu_s, water
 #     output = model.RHs_model(ea, esat, DELTA, LST_soil, t_avg, mu_s, water)
 #     # RHs.where(water, 1).rename("RHs")
 #     assert False
 
 
 # def test_net_radiation():
-#     # emissivity, LST_canopy, LST_soil, Rs_MJ, Rld_MJ, albedo, tauS, tauL
 #     output = model.net_radiation(emissivity, LST_canopy, LST_soil, Rs_MJ, Rld_MJ, albedo, tauS, tauL)
 #     # Rnc.add(Rns), Rnc, Rns, G, Rns.subtract(G)
 #     assert False
 
 
 # def test_isothermal_net_radiation():
-#     # Rnc, AEs, tauL, emissivity, t_avg, gg, LST_canopy, LST_soil
 #     output = model.isothermal_net_radiation(Rnc, AEs, tauL, emissivity, t_avg, gg, LST_canopy, LST_soil)
 #     # Rnci, AEsi
 #     assert False
 
 
 # def test_mu_terms():
-#     # Rnc, Rnci, DELTA, gamma, AEs, AEsi, RHs
 #     output = model.mu_terms(Rnc, Rnci, DELTA, gamma, AEs, AEsi, RHs)
 #     #  mu_c, mu_s
 #     assert False
@@ -123,45 +116,41 @@ def test_DIF_model(gamma, DELTA, Rnc, AEs, RHs, mu_c, mu_s, expected, tol=0.0001
 
 
 # def test_aerodynamic_term():
-#     # del_LC, fc, LST_soil, RHs, gamma, DELTA, u2, esat, ea
 #     output = model.aerodynamic_term(del_LC, fc, LST_soil, RHs, gamma, DELTA, u2, esat, ea)
 #     assert False
 
 
 # def test_Rld_atm_ASCE():
-#     # emissivity, fcd, ea, t_avg
 #     output = model.Rld_atm_ASCE(emissivity, fcd, ea, t_avg)
 #     assert False
 
 
 # def test_add_lapse_correction():
-#     # ta, elev, elev_gridmet
-#     output = model.add_lapse_correction(ta, elev, elev_gridmet)
-#     # t_corrected
+#     output = model.add_lapse_correction(ta, elev, meteo_elev)
 #     assert False
 
 
 # def test_terrain_shade_correct_srad():
-#     # Rs_MJ, Ra_MJ, elev, time_start, albedo
-#     output = model.terrain_shade_correct_srad()
+#     output = model.terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elev, time_start, albedo, latitude, longitude)
 #     assert False
 
 
 # def test_et():
 #     output = model.et(
-#         # image,
 #         lai,
 #         lst,
 #         albedo,
 #         emissivity,
-#         meteorology_source,
+#         tmin,
+#         tmax,
+#         qa,
+#         u10,
+#         srad,
 #         landcover,
 #         elevation,
 #         time_start,
-#         proj,
 #         latitude,
-#         # geometry_image,
-#         # coords
+#         longitude,
 #     )
 #     assert False
 

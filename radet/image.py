@@ -2,8 +2,10 @@ import re
 
 import ee
 import openet.core.common
+from numpy.ma.core import masked
 
 from radet import landsat
+from radet import meteorology
 from radet import model
 from radet import utils
 
@@ -31,7 +33,10 @@ class Image:
     def __init__(
         self,
         image,
-        meteorology_source="IDAHO_EPSCOR/GRIDMET",
+        temperature_source="IDAHO_EPSCOR/GRIDMET",
+        humidity_source="IDAHO_EPSCOR/GRIDMET",
+        windspeed_source="IDAHO_EPSCOR/GRIDMET",
+        solar_radiation_source="IDAHO_EPSCOR/GRIDMET",
         landcover_source="projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER",
         elevation_source="USGS/SRTMGL1_003",
         **kwargs,
@@ -45,11 +50,15 @@ class Image:
             Image must have bands:
                 albedo, emissivity, lai, lst, ndvi, ndwi
             Image must have properties:
-                SUN_ELEVATION, system:id, system:index, system:time_start
-        meteorology_source : {"IDAHO_EPSCOR/GRIDMET"}
-            Daily meteorology source collection ID.
-            Meteorology collection must have bands for:
-                min temp, max temp, solar rad, humidity, wind speed
+                system:id, system:index, system:time_start
+        temperature_source : {"IDAHO_EPSCOR/GRIDMET"}
+            Temperature source collection ID or keyword.
+        humidity_source : {"IDAHO_EPSCOR/GRIDMET"}
+            Humidity source collection ID or keyword.
+        windspeed_source : {"IDAHO_EPSCOR/GRIDMET"}
+            Wind speed source collection ID or keyword.
+        solar_radiation_source : {"IDAHO_EPSCOR/GRIDMET"}
+            Solar radiation source collection ID or keyword.
         landcover_source : {"projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER",
                             "projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER/Annual_NLCD_LndCov_2023_CU_C1V1"}
             Land cover source collection or image ID.
@@ -72,6 +81,8 @@ class Image:
                 equivalent to nearest neighbor resampling.
             latitude : ee.Image, ee.Number, float, optional
                 Latitude [deg].  If not set will default to ee.Image.pixelLonLat().
+            longitude : ee.Image, ee.Number, float, optional
+                Longitude [deg].  If not set will default to ee.Image.pixelLonLat().
 
         Notes
         -----
@@ -114,9 +125,14 @@ class Image:
         self.doy = ee.Number(self.date.getRelative("day", "year")).add(1).int()
 
         # Model input parameters
-        self.meteorology_source = meteorology_source
+        self.temperature_source = temperature_source
+        self.humidity_source = humidity_source
+        self.windspeed_source = windspeed_source
+        self.solar_radiation_source = solar_radiation_source
         self.landcover_source = landcover_source
         self.elevation_source = elevation_source
+
+        self.init_kwargs = kwargs
 
         # Reference ET parameters
         try:
@@ -152,16 +168,6 @@ class Image:
         self.geometry = self.image.select([0]).geometry()
         # self.latlon = ee.Image.pixelLonLat().reproject(self.proj)
         # self.coords = self.latlon.select(["longitude", "latitude"])
-
-        # CGM - Needed for running the tests
-        if ("latitude" not in kwargs.keys()) or (not kwargs["latitude"]):
-            self.latitude = self.lai.multiply(0).add(ee.Image.pixelLonLat().select(["latitude"]))
-        elif utils.is_number(kwargs["latitude"]):
-            self.latitude = ee.Image.constant(kwargs["latitude"])
-        elif isinstance(kwargs["latitude"], ee.computedobject.ComputedObject):
-            self.latitude = kwargs["latitude"]
-        else:
-            raise ValueError("invalid latitude parameter")
 
     @classmethod
     def from_image_id(cls, image_id, **kwargs):
@@ -201,13 +207,15 @@ class Image:
         return method(ee.Image(image_id), **kwargs)
 
     @classmethod
-    def from_landsat_c2_sr(cls, sr_image, cloudmask_args={}, **kwargs):
+    def from_landsat_c2_sr(cls, sr_image, mask_ocean_flag=True, cloudmask_args={}, **kwargs):
         """Returns a RADET Image instance from a Landsat Collection 2 SR image
 
         Parameters
         ----------
         sr_image : ee.Image, str
             A raw Landsat Collection 2 SR image or image ID.
+        mask_ocean_flag : bool
+            Mask ocean pixels.
         cloudmask_args : dict
             keyword arguments to pass through to cloud mask function
         kwargs : dict
@@ -227,7 +235,8 @@ class Image:
         # Rename bands to generic names
         # CGM - Intentionally letting these lines be long to improve readability
         #   If the plan long term is to use the DisALEXI albedo calculation
-        #   then we could remove the ultra_blue band and greatly simplify this section
+        #   then we could remove the ultra_blue band and simplify this section
+        #   to a single set of band names and coefficients
         input_bands = ee.Dictionary(
             {
                 "LANDSAT_4": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "ST_B6", "QA_PIXEL", "ST_EMIS"],
@@ -279,8 +288,8 @@ class Image:
 
         prep_image = (
             sr_image.select(input_bands.get(spacecraft_id), output_bands.get(spacecraft_id))
-            .multiply(ee.Number(ee.List(scalars.get(spacecraft_id))))
-            .add(ee.Number(ee.List(offsets.get(spacecraft_id))))
+            .multiply(ee.Image.constant(ee.List(scalars.get(spacecraft_id))))
+            .add(ee.Image.constant(ee.List(offsets.get(spacecraft_id))))
         )
 
         # YK - RADET used Disalexi albedo 
@@ -291,9 +300,6 @@ class Image:
             landsat.cloud_mask_C2_l89(sr_image),
             landsat.cloud_mask_C2_l457(sr_image),
         )
-
-        # Water mask
-        water_mask = landsat.water_mask(product="GLO")
 
         # # Default the cloudmask flags to True if they were not
         # # Eventually these will probably all default to True in openet.core
@@ -317,13 +323,11 @@ class Image:
             c2_lst_correct = cls._C2_LST_CORRECT
 
         if c2_lst_correct:
-            lst = openet.core.common.landsat_c2_sr_lst_correct(sr_image, landsat.ndvi(prep_image))
+            lst = openet.core.common.landsat_c2_sr_lst_correct(sr_image)
         else:
             lst = prep_image.select(["lst"])
 
-        # Build the input image
-        # Don't compute LST since it is being provided
-        # YK: Don't compute emissivity 
+        # Build the input image from the components
         input_image = ee.Image(
             [
                 albedo,
@@ -335,18 +339,21 @@ class Image:
             ]
         )
 
-        # Apply the cloud mask and add properties
-        input_image = (
-            input_image.updateMask(cloud_mask)
-            .updateMask(water_mask.Not())
-            .set(
-                {
-                    "system:index": sr_image.get("system:index"),
-                    "system:time_start": sr_image.get("system:time_start"),
-                    "system:id": sr_image.get("system:id"),
-                    "SUN_ELEVATION": sr_image.get("SUN_ELEVATION"),
-                }
-            )
+        # Apply the cloud mask
+        input_image = input_image.updateMask(cloud_mask)
+
+        # Apply the ocean mask
+        if mask_ocean_flag:
+            # TODO: Consider renaming this variable (and function) to "ocean_mask"
+            input_image = input_image.updateMask(landsat.water_mask(product="GLO").Not())
+
+        # Set the image properties
+        input_image = input_image.set(
+            {
+                "system:index": sr_image.get("system:index"),
+                "system:time_start": sr_image.get("system:time_start"),
+                "system:id": sr_image.get("system:id"),
+            }
         )
 
         # Instantiate the class
@@ -395,14 +402,17 @@ class Image:
             emissivity=self.emissivity,
             lai=self.lai,
             lst=self.lst,
-            meteorology_source=self.meteorology_source,
             landcover=self.landcover,
             elevation=self.elevation,
+            tmin=self.tmin,
+            tmax=self.tmax,
+            qa=self.qa,
+            u10=self.u10,
+            srad=self.srad,
+            meteo_elevation=self.meteo_elevation,
             time_start=self.time_start,
-            # TODO: Remove after testing
-            # proj=self.proj,
-            # geometry_image=self.geometry,
-            # coords=self.coords,
+            latitude=self.latitude,
+            longitude=self.longitude,
         )
 
         return et.rename("et").set(self.properties)
@@ -479,24 +489,57 @@ class Image:
         """Normalized difference water index (NDWI)"""
         return self.image.select(["ndwi"]).set(self.properties)
 
-    # TODO: If the model does not do any additional masking we might be able to
-    #   build the mask from the NDVI or QA band instead of the ET
-    # CGM - Had to switch to building the mask from ndvi to get the tests to pass
     @lazy_property
-    def mask(self):
-        """Mask of all active pixels (based on the final et)"""
-        return self.ndvi.multiply(0).add(1).updateMask(1).uint8().rename(["mask"]).set(self.properties)
-        # return self.et.multiply(0).add(1).updateMask(1).uint8().rename(["mask"]).set(self.properties)
+    def tmin(self):
+        """Daily minimum air temperature [K]"""
+        return self._meteo(self.temperature_source, variable="tmin")
 
-    # CGM - This band shouldn't be needed but removing it is causing problems
     @lazy_property
-    def time(self):
-        """Return an image of the 0 UTC time (in milliseconds)"""
-        return (
-            self.mask
-            .double().multiply(0).add(utils.date_to_time_0utc(self.date))
-            .rename(['time']).set(self.properties)
-        )
+    def tmax(self):
+        """Daily maximum air temperature [K]"""
+        return self._meteo(self.temperature_source, variable="tmax")
+
+    # TODO: Consider renaming to something else like sph or specific_humidity
+    @lazy_property
+    def qa(self):
+        """Specific humidity"""
+        return self._meteo(self.humidity_source, variable="qa")
+
+    @lazy_property
+    def u10(self):
+        """Daily average wind speed [m s-1]"""
+        return self._meteo(self.windspeed_source, variable="u10")
+
+    @lazy_property
+    def srad(self):
+        """Daily incoming solar radiation [W m-2]"""
+        return self._meteo(self.solar_radiation_source, "srad")
+
+    # TODO: Moving this function into the meteorology module,
+    #   or at least move parsing the source string, so that the logic of understanding
+    #   which sources are supported is defined in meteorology, not here
+    def _meteo(self, source, variable):
+        """Helper function for selecting the meteorology variables"""
+        if utils.is_number(source):
+            meteo_img = ee.Image.constant(source)
+        elif isinstance(source, ee.computedobject.ComputedObject):
+            meteo_img = ee.Image(source)
+        elif source in ["IDAHO_EPSCOR/GRIDMET", "GRIDMET"]:
+            meteo_img = meteorology.gridmet(variable=variable, time_start=self.time_start)
+        else:
+            raise ValueError(f"Unsupported source: {source}\n")
+
+        return meteo_img.rename([variable])
+
+    @lazy_property
+    def meteo_elevation(self):
+        """Meteorology (temperature) elevation"""
+        if utils.is_number(self.temperature_source):
+            # For testing, if the temperature source is a number,
+            #   return the fine scale elevation (which should also be a number)
+            return self.elevation
+        else:
+            return meteorology.elevation(self.temperature_source)
 
     # TODO: Consider adding support for elevation image collections that are tiled (e.g. new 3DEP)
     @lazy_property
@@ -517,19 +560,17 @@ class Image:
     def landcover(self):
         """Landcover"""
         if utils.is_number(self.landcover_source):
-            lc_img = ee.Image.constant(int(self.landcover_source)).rename(["landcover"])
-            # self.landcover_type = "NLCD"
+            lc_img = ee.Image.constant(int(self.landcover_source))
         elif isinstance(self.landcover_source, ee.computedobject.ComputedObject):
-            # If the source is an ee.Image assume it is an NLCD image
-            lc_img = self.landcover_source.rename(["landcover"])
-            # self.landcover_type = "NLCD"
+            # If the source is an ee.Image object assume it is an NLCD image
+            lc_img = ee.Image(self.landcover_source)
         elif re.match("projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER/Annual_NLCD_LndCov_\\d{4}_CU_\\w+",
                       self.landcover_source, re.I):
-            # Assume an annual NLCD image ID was passed in and use it directly
-            lc_img = ee.Image(self.landcover_source).rename(["landcover"])
-            self.landcover_type = "NLCD"
+            # Check if the source is similar to an awesome GEE catalog annual NLCD image ID
+            lc_img = ee.Image(self.landcover_source)
         elif self.landcover_source == "projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER":
-            # Select the closest year in time from the Annual NLCD image collection
+            # Check if the source is similar to an awesome GEE catalog annual NLCD collection ID
+            # Select the closest image in time to the target Landsat image
             lc_coll = ee.ImageCollection(self.landcover_source)
             lc_year = (
                 ee.Number(self.year)
@@ -538,12 +579,65 @@ class Image:
             )
             lc_img = (
                 lc_coll.filter(ee.Filter.calendarRange(lc_year, lc_year, "year")).first()
-                .rename(["landcover"])
-                # .set({'landcover_year': landcover_year})
+                .set({'landcover_year': lc_year})
             )
-            self.landcover_type = "NLCD"
-
         else:
             raise ValueError(f"Unsupported landcover_source: {self.landcover_source}\n")
 
-        return lc_img
+        return lc_img.rename(["landcover"])
+
+    @lazy_property
+    def latitude(self):
+        """Longitude [deg]"""
+        if ("latitude" not in self.init_kwargs.keys()) or (not self.init_kwargs["latitude"]):
+            return self.lai.multiply(0).add(ee.Image.pixelLonLat().select(["latitude"]))
+            # return ee.Image.pixelLonLat().select(["latitude"])
+        elif utils.is_number(self.init_kwargs["latitude"]):
+            return ee.Image.constant(self.init_kwargs["latitude"])
+        elif isinstance(self.init_kwargs["latitude"], ee.computedobject.ComputedObject):
+            return self.init_kwargs["latitude"]
+        else:
+            raise ValueError("invalid latitude parameter")
+
+    @lazy_property
+    def longitude(self):
+        """Latitude [deg]"""
+        if ("longitude" not in self.init_kwargs.keys()) or (not self.init_kwargs["longitude"]):
+            return self.lai.multiply(0).add(ee.Image.pixelLonLat().select(["longitude"]))
+            # return ee.Image.pixelLonLat().select(["longitude"])
+        elif utils.is_number(self.init_kwargs["longitude"]):
+            return ee.Image.constant(self.init_kwargs["longitude"])
+        elif isinstance(self.init_kwargs["longitude"], ee.computedobject.ComputedObject):
+            return self.init_kwargs["longitude"]
+        else:
+            raise ValueError("invalid longitude parameter")
+
+    @lazy_property
+    def mask(self):
+        """Mask of all active pixels (based on the final et)
+
+        Notes
+        -----
+        This function is needed for the collection interpolation
+
+        """
+        # CGM - Had to switch to building the mask from ndvi to get the tests to pass
+        #   and it may be okay to do this if no additional masking is applied within
+        #   the model.et() function
+        return self.lai.multiply(0).add(1).updateMask(1).uint8().rename(["mask"]).set(self.properties)
+        # return self.et.multiply(0).add(1).updateMask(1).uint8().rename(["mask"]).set(self.properties)
+
+    @lazy_property
+    def time(self):
+        """Image of the 0 UTC time (in milliseconds) for all active pixels
+
+        Notes
+        -----
+        This function is needed for the collection interpolation
+
+        """
+        return (
+            self.mask
+            .double().multiply(0).add(utils.date_to_time_0utc(self.date))
+            .rename(['time']).set(self.properties)
+        )
