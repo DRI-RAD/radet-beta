@@ -107,7 +107,7 @@ def et(
     tmaxK_cor = add_lapse_correction(tmaxK, elevation, elevation_coarse)
     tmninK_cor = add_lapse_correction(tminK, elevation, elevation_coarse)
 
-    # average air temperature (K)
+    # Average air temperature (K)
     t_avg = tmninK_cor.add(tmaxK_cor).multiply(0.5)
 
     # Saturation vapor pressure (kPa)
@@ -129,22 +129,23 @@ def et(
     Rs_MJ_cor = terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elevation, time_start, albedo)
     
     ############################################
-    # Other variables indepedent to mu terms
+    # Other variables independent to mu terms
     ############################################
-    # land cover mask
-    del_LC, water = wet_mask(landcover, time_start, lai)
+    # Land cover mask
+    del_LC, water = wet_mask(landcover, lai)
 
-    # transmissivity 
+    # Transmissivity
     tauL, tauS, fc = transmissivities(lai)
     
-    # donward long wave from atmosphere
+    # Downward long wave from atmosphere
     Rld_MJ = Rld_atm_ASCE(emissivity, fcd, ea, t_avg)
 
     # Daily mean LST 
     LST_avg = daily_avg_lst(tmninK_cor, lst, sunrise_ts, t_avg)
 
     # TODO: Switch to a number calculation instead of an image expression
-    # soil conductive exchange coefficient
+    # Soil conductive exchange coefficient
+    # gg = 1000 * ((pi / 86400) ** 0.5) * 86400 / (10 ** 6)
     gg = ee.Image().expression("1000 * ((pi / 86400) ** 0.5) * 86400 / (10 ** 6)", {"pi": pi})
 
     ##########################################
@@ -156,7 +157,7 @@ def et(
     # RHs (mu_s=1 leads to RHs = RHa)
     RHs = ea.divide(esat)
         
-    # soil and canopy LST
+    # Soil and canopy LST
     LST_canopy, LST_soil = canopy_and_soil_LST(
         LST_avg, t_avg, Rs_MJ_cor, Rld_MJ, fc, tauS, tauL, mu_c, mu_s, RHs, DELTA, gamma, emissivity, albedo
     )
@@ -217,30 +218,17 @@ def transmissivities(lai):
 
 
 # TODO: Add support for passing in remap lists, or remap the values in image.py
-def wet_mask(landcover_source, time_start, lai):
+#   May want to also consider separating this into two functions
+def wet_mask(landcover, lai):
     """"""
-    # USGS NLCD land cover 
-    # Load land cover image
-
-    landcover_coll = ee.ImageCollection(landcover_source)
-    landcover_year = (
-        ee.Number(ee.Date(time_start).get("year"))
-        .max(ee.Date(landcover_coll.aggregate_min('system:time_start')).get('year'))
-        .min(ee.Date(landcover_coll.aggregate_max('system:time_start')).get('year'))
-    )
-    landcover_date = ee.Date.fromYMD(landcover_year, 1, 1)
-    landcover_img = (
-        landcover_coll.filterDate(landcover_date, landcover_date.advance(1, 'year'))
-        .first().select([0])
-        .set({'landcover_year': landcover_year})
-    )
-
-    water = landcover_img.remap([11], [1], 0).eq(1)
+    water = landcover.remap([11], [1], 0).eq(1)
 
     # Define wet surfaces
-    wet = landcover_img.remap([11, 81, 82, 95], [1, 1, 1, 1], 0).eq(1)
-    wet_ww = landcover_img.remap([90], [1], 0).eq(1)
+    wet = landcover.remap([11, 81, 82, 95], [1, 1, 1, 1], 0).eq(1)
+
+    wet_ww = landcover.remap([90], [1], 0).eq(1)
     wet_ww2 = wet_ww.And(lai.lt(1))
+
     return wet.Or(wet_ww2), water
 
 
@@ -439,8 +427,6 @@ def add_lapse_correction(ta, elev, elev_coarse):
     lapse_corr = elev.subtract(elev_coarse).multiply(-0.0065)
 
     return ta.add(lapse_corr).rename("t_corrected")
-
-
 
 
 #############################################################################

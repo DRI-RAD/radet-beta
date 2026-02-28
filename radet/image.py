@@ -34,7 +34,6 @@ class Image:
         meteorology_source="IDAHO_EPSCOR/GRIDMET",
         landcover_source="projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER",
         elevation_source="USGS/SRTMGL1_003",
-        latitude=None,
         **kwargs,
     ):
         """Construct a generic RADET Image
@@ -44,7 +43,7 @@ class Image:
         image : ee.Image
             A "prepped" RADET input image.
             Image must have bands:
-                albedo, emissivity, lai, lst, emissivity, ndvi, ndwi
+                albedo, emissivity, lai, lst, ndvi, ndwi
             Image must have properties:
                 SUN_ELEVATION, system:id, system:index, system:time_start
         meteorology_source : {"IDAHO_EPSCOR/GRIDMET"}
@@ -56,8 +55,7 @@ class Image:
             Land cover source collection or image ID.
             The default is "projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER".
         elevation_source : str, ee.Image
-            Elevation source keyword or asset.
-            The default is "USGS/SRTMGL1_003".
+            Elevation source keyword or asset. The default is "USGS/SRTMGL1_003".
             Units must be in meters.
         kwargs : dict, optional
             et_reference_source : str, float
@@ -159,9 +157,9 @@ class Image:
         if ("latitude" not in kwargs.keys()) or (not kwargs["latitude"]):
             self.latitude = self.lai.multiply(0).add(ee.Image.pixelLonLat().select(["latitude"]))
         elif utils.is_number(kwargs["latitude"]):
-            self.latitude = ee.Image.constant(latitude)
+            self.latitude = ee.Image.constant(kwargs["latitude"])
         elif isinstance(kwargs["latitude"], ee.computedobject.ComputedObject):
-            self.latitude = latitude
+            self.latitude = kwargs["latitude"]
         else:
             raise ValueError("invalid latitude parameter")
 
@@ -520,11 +518,11 @@ class Image:
         """Landcover"""
         if utils.is_number(self.landcover_source):
             lc_img = ee.Image.constant(int(self.landcover_source)).rename(["landcover"])
-            self.lc_type = "NLCD"
+            # self.landcover_type = "NLCD"
         elif isinstance(self.landcover_source, ee.computedobject.ComputedObject):
             # If the source is an ee.Image assume it is an NLCD image
             lc_img = self.landcover_source.rename(["landcover"])
-            self.landcover_type = "NLCD"
+            # self.landcover_type = "NLCD"
         elif re.match("projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER/Annual_NLCD_LndCov_\\d{4}_CU_\\w+",
                       self.landcover_source, re.I):
             # Assume an annual NLCD image ID was passed in and use it directly
@@ -532,8 +530,6 @@ class Image:
             self.landcover_type = "NLCD"
         elif self.landcover_source == "projects/sat-io/open-datasets/USGS/ANNUAL_NLCD/LANDCOVER":
             # Select the closest year in time from the Annual NLCD image collection
-            # Hardcoding the year ranges for now but we might want to change this to
-            #   a more dynamic approach to allow for additional years to be added.
             lc_coll = ee.ImageCollection(self.landcover_source)
             lc_year = (
                 ee.Number(self.year)
@@ -543,8 +539,10 @@ class Image:
             lc_img = (
                 lc_coll.filter(ee.Filter.calendarRange(lc_year, lc_year, "year")).first()
                 .rename(["landcover"])
+                # .set({'landcover_year': landcover_year})
             )
             self.landcover_type = "NLCD"
+
         else:
             raise ValueError(f"Unsupported landcover_source: {self.landcover_source}\n")
 
