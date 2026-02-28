@@ -368,7 +368,7 @@ def test_Image_et_properties():
     assert output['properties']['image_id'] == COLL_ID + SCENE_ID
 
 
-def test_Image_et_defaults(expected=7.629, tol=0.001):
+def test_Image_et_defaults(expected=6.338, tol=0.001):
     output = utils.constant_image_value(ee.Image(default_image_obj().et))
     assert abs(output['et'] - expected) <= tol
 

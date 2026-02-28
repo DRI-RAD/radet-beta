@@ -2,7 +2,6 @@ import re
 
 import ee
 import openet.core.common
-from numpy.ma.core import masked
 
 from radet import landsat
 from radet import meteorology
@@ -339,15 +338,14 @@ class Image:
             ]
         )
 
-        # Apply the cloud mask
         input_image = input_image.updateMask(cloud_mask)
 
         # Apply the ocean mask
         if mask_ocean_flag:
             # TODO: Consider renaming this variable (and function) to "ocean_mask"
+            #   since the two supported products are not general water masks
             input_image = input_image.updateMask(landsat.water_mask(product="GLO").Not())
 
-        # Set the image properties
         input_image = input_image.set(
             {
                 "system:index": sr_image.get("system:index"),
@@ -492,45 +490,41 @@ class Image:
     @lazy_property
     def tmin(self):
         """Daily minimum air temperature [K]"""
-        return self._meteo(self.temperature_source, variable="tmin")
+        return meteorology.get_source_variable(
+            self.temperature_source, variable="tmin", time_start=self.time_start
+        )
 
     @lazy_property
     def tmax(self):
         """Daily maximum air temperature [K]"""
-        return self._meteo(self.temperature_source, variable="tmax")
+        return meteorology.get_source_variable(
+            self.temperature_source, variable="tmax", time_start=self.time_start
+        )
 
     # TODO: Consider renaming to something else like sph or specific_humidity
     @lazy_property
     def qa(self):
         """Specific humidity"""
-        return self._meteo(self.humidity_source, variable="qa")
+        return meteorology.get_source_variable(
+            self.humidity_source, variable="qa", time_start=self.time_start
+        )
 
     @lazy_property
     def u10(self):
         """Daily average wind speed [m s-1]"""
-        return self._meteo(self.windspeed_source, variable="u10")
+        return meteorology.get_source_variable(
+            self.windspeed_source, variable="u10", time_start=self.time_start
+        )
 
     @lazy_property
     def srad(self):
         """Daily incoming solar radiation [W m-2]"""
-        return self._meteo(self.solar_radiation_source, "srad")
+        return meteorology.get_source_variable(
+            self.solar_radiation_source, variable="srad", time_start=self.time_start
+        )
 
-    # TODO: Moving this function into the meteorology module,
-    #   or at least move parsing the source string, so that the logic of understanding
-    #   which sources are supported is defined in meteorology, not here
-    def _meteo(self, source, variable):
-        """Helper function for selecting the meteorology variables"""
-        if utils.is_number(source):
-            meteo_img = ee.Image.constant(source)
-        elif isinstance(source, ee.computedobject.ComputedObject):
-            meteo_img = ee.Image(source)
-        elif source in ["IDAHO_EPSCOR/GRIDMET", "GRIDMET"]:
-            meteo_img = meteorology.gridmet(variable=variable, time_start=self.time_start)
-        else:
-            raise ValueError(f"Unsupported source: {source}\n")
-
-        return meteo_img.rename([variable])
-
+    # TODO: Long term it might be better to allow the user to set this parameter
+    #   instead of basing it on the temperature source
     @lazy_property
     def meteo_elevation(self):
         """Meteorology (temperature) elevation"""

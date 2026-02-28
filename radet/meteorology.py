@@ -1,18 +1,21 @@
 import ee
 
+from radet import utils
 
-# def meteo(self, source, variable):
-#     """Helper function for selecting the meteorology variables"""
-#     if utils.is_number(source):
-#         meteo_img = ee.Image.constant(int(source))
-#     elif isinstance(source, ee.computedobject.ComputedObject):
-#         meteo_img = ee.Image(source)
-#     elif source in ["IDAHO_EPSCOR/GRIDMET", "GRIDMET"]:
-#         meteo_img = gridmet(variable=variable, time_start=self.time_start)
-#     else:
-#         raise ValueError(f"Unsupported source: {source}\n")
-#
-#     return meteo_img.rename([variable])
+
+# TODO: Come up with a better name for this function
+def get_source_variable(source, variable, time_start):
+    """Helper function for selecting the meteorology variable from the target source"""
+    if utils.is_number(source):
+        meteo_img = ee.Image.constant(int(source))
+    elif isinstance(source, ee.computedobject.ComputedObject):
+        meteo_img = ee.Image(source)
+    elif source in ["IDAHO_EPSCOR/GRIDMET", "GRIDMET"]:
+        meteo_img = gridmet(variable=variable, time_start=time_start)
+    else:
+        raise ValueError(f"Unsupported source: {source}\n")
+
+    return meteo_img.rename([variable])
 
 
 def elevation(source):
@@ -23,7 +26,7 @@ def elevation(source):
         raise ValueError("Unsupported temperature source for selecting meteorology elevation: {variable}")
 
 
-# CGM - Should the collection ID be an input to the function?
+# TODO: Should the collection ID be an input to the function?
 #   It would make it easier for the user to reuse one meteorology function
 #   for a different similar one (like URMA and RTMA) but is probably not needed
 def gridmet(variable, time_start):
