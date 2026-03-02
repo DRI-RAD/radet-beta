@@ -1,43 +1,72 @@
 import ee
 
+from radet import utils
 
-def gridmet(time_start, meteorology_source='IDAHO_EPSCOR/GRIDMET'):
-    """
+
+# TODO: Come up with a better name for this function
+def get_source_variable(source, variable, time_start):
+    """Helper function for selecting the meteorology variable from the target source"""
+    if utils.is_number(source):
+        meteo_img = ee.Image.constant(int(source))
+    elif isinstance(source, ee.computedobject.ComputedObject):
+        meteo_img = ee.Image(source)
+    elif source in ["IDAHO_EPSCOR/GRIDMET", "GRIDMET"]:
+        meteo_img = gridmet(variable=variable, time_start=time_start)
+    else:
+        raise ValueError(f"Unsupported source: {source}\n")
+
+    return meteo_img.rename([variable])
+
+
+def elevation(source):
+    """Get the meteorology elevation based on the temperature source"""
+    if source in ["IDAHO_EPSCOR/GRIDMET", "GRIDMET"]:
+        return ee.Image("projects/openet/assets/meteorology/gridmet/ancillary/elevation")
+    else:
+        raise ValueError("Unsupported temperature source for selecting meteorology elevation: {variable}")
+
+
+# TODO: Should the collection ID be an input to the function?
+#   It would make it easier for the user to reuse one meteorology function
+#   for a different similar one (like URMA and RTMA) but is probably not needed
+def gridmet(variable, time_start):
+    """GRIDMET daily meteorology
 
     Parameters
     ----------
+    variable : {"tmin", "tmax", "qa", "u10", "srad"}
+        Standard meteorology variable names used in RADET model.
     time_start : int, ee.Number
         Image property: time start of the image.
-    meteorology_source :  ee.ImageCollection, str
-        Daily meteorological data.
 
     Returns
     -------
-    srad, tminK, tmaxK, qa, u10
-
-    Notes
-    -----
-    Accepted collections:
-    Daily : IDAHO_EPSCOR/GRIDMET
+    ee.Image
 
     """
     # Get date information
     time_start = ee.Number(time_start)
 
-    # Filtering Daily data
+    # Filtering daily data
     meteorology_daily = (
-        ee.ImageCollection(meteorology_source)
+        ee.ImageCollection("IDAHO_EPSCOR/GRIDMET")
         .filterDate(ee.Date(time_start).advance(-1, "day"), ee.Date(time_start))
         .first()
     )
 
-    srad = meteorology_daily.select(["srad"])
-    tmaxK = meteorology_daily.select(["tmmx"])
-    tminK = meteorology_daily.select(["tmmn"])
-    qa = meteorology_daily.select(["sph"])
-    u10 = meteorology_daily.select(["vs"])
-
-    return srad, tminK, tmaxK, qa, u10
+    # Map the standardized meteorology variable names to the GRIDMET bands
+    if variable == "tmin":
+        return meteorology_daily.select(["tmmn"], [variable])
+    elif variable == "tmax":
+        return meteorology_daily.select(["tmmx"], [variable])
+    elif variable == "qa":
+        return meteorology_daily.select(["sph"], [variable])
+    elif variable == "u10":
+        return meteorology_daily.select(["vs"], [variable])
+    elif variable == "srad":
+        return meteorology_daily.select(["srad"], [variable])
+    else:
+        raise ValueError("Unsupported GRIDMET meteorology variable: {variable}")
 
 
 # def era5land(time_start, meteorology_source_inst, meteorology_source_daily):

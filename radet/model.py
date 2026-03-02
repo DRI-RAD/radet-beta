@@ -1,13 +1,8 @@
-import logging
 import math
-import pprint
 
 import ee
 
-from radet import meteorology
-
-# logging.basicConfig(level=logging.INFO)
-# logger = logging.getLogger(__name__)
+from radet import utils
 
 pi = math.pi
 SIG = 4.901e-9
@@ -18,35 +13,52 @@ def et(
     lst,
     albedo,
     emissivity,
-    meteorology_source,
     landcover,
     elevation,
+    tmin,
+    tmax,
+    qa,
+    u10,
+    srad,
+    meteo_elevation,
     time_start,
     latitude=None,
-    # proj,
+    longitude=None,
 ):
     """RADET Daily Evapotranspiration [mm day-1].
 
     Parameters
     ----------
     lai : ee.Image
-        Leaf Area index.
+        Leaf Area Index.
     lst : ee.Image
         Land Surface Temperature [K].
     albedo : ee.Image
         Surface albedo.
     emissivity : ee.Image
         Broad-band surface emissivity.
-    meteorology_source : str
-        Meteorological dataset source collection ID.
     landcover : str
         Landcover image with NLCD classes.
     elevation : ee.Image
         Elevation [m].
-    latitude : ee.Image
-        Latitude [deg].
+    tmin : ee.Image
+        Minimum daily air temperature [K].
+    tmax : ee.Image
+        Maximum daily air temperature [K].
+    qa : ee.Image
+        Daily specific humidity.
+    u10 : ee.Image
+        Daily average wind speed [m s-1].
+    srad : ee.Image
+        Incoming solar radiation [W m-2].
+    meteo_elevation : ee.Image
+        Meteorology elevation used for lapsing the air temperature [m].
     time_start : str
-        Image property: time start of the image.
+        Time start of the image.
+    latitude : ee.Image, optional
+        Latitude [deg].
+    longitude : ee.Image, optional
+        Latitude [deg].
 
     Returns
     -------
@@ -62,28 +74,10 @@ def et(
 
     # TODO: check if time_start local time affects calculations. (BC: Don't think so)
 
-    # TODO: Move all of the meteorology processing outside of this function
-    #   so that srad, tmin, etc are passed in as inputs to the function
-    # Meteorological data
-    # Only accepts GridMET for now
-    # TODO: add ERA5-Land compatibility
-    if meteorology_source == "IDAHO_EPSCOR/GRIDMET":
-        srad, tminK, tmaxK, qa, u10 = meteorology.gridmet(time_start, meteorology_source)
-
-        # CGM: Could rename to something like "elev_meteorology" or "meteorology_elev"
-        elevation_coarse = ee.Image("projects/openet/assets/meteorology/gridmet/ancillary/elevation")
-        latitude_coarse = ee.Image("projects/openet/assets/meteorology/gridmet/ancillary/latitude")
-
-    # elif (meteorology_source == "projects/openet/assets/meteorology/era5land/na/daily") or (
-    #     meteorology_source == "projects/openet/assets/meteorology/era5land/sa/daily"
-    # ):
-    #     tmin, tmax, tair, ux, rh, rso24h, tfac = meteorology_era5land(time_start, meteorology_source)
-
-    else:
-        raise ValueError("Error: wrong daily or instant met data source assigned.")
-
     if latitude is None:
-        latitude = ee.Image.pixelLonLat().select(['latitude'])
+        latitude = ee.Image.pixelLonLat().select(["latitude"])
+    if longitude is None:
+        longitude = ee.Image.pixelLonLat().select(["longitude"])
 
     #################################
     # Meteorological variables
@@ -104,8 +98,8 @@ def et(
     ###################################################
     # temperature variables after lapse rate correction
     ##################################################
-    tmaxK_cor = add_lapse_correction(tmaxK, elevation, elevation_coarse)
-    tmninK_cor = add_lapse_correction(tminK, elevation, elevation_coarse)
+    tmaxK_cor = add_lapse_correction(tmax, elevation, meteo_elevation)
+    tmninK_cor = add_lapse_correction(tmin, elevation, meteo_elevation)
 
     # Average air temperature (K)
     t_avg = tmninK_cor.add(tmaxK_cor).multiply(0.5)
@@ -126,7 +120,7 @@ def et(
     Rs_MJ, Ra_MJ, fcd, sunrise_ts = clear_sky_terms(time_start, latitude, elevation, srad)
 
     # surface shortwave correction based on shade effect (Allen et al., 2006)
-    Rs_MJ_cor = terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elevation, time_start, albedo)
+    Rs_MJ_cor = terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elevation, time_start, albedo, latitude, longitude)
     
     ############################################
     # Other variables independent to mu terms
@@ -205,9 +199,11 @@ def et(
 
     # # CGM - If you adjust the order of operations in DIF_model() you can keep
     # #   a reference to the original image projection and don't need to reset it here
+    # # This approach seems to be working and this block will be removed in the future
     # return ee.Image(ET_DIF.add(Ea).rename("ET")).setDefaultProjection(proj)
 
 
+# TODO: Remove from dedicated function or split into separate functions
 def transmissivities(lai):
     """"""
     tauL = lai.expression("exp(-0.95 * lai)", {"lai": lai}).rename("tauL").clamp(0.01, 1)
@@ -218,7 +214,7 @@ def transmissivities(lai):
 
 
 # TODO: Add support for passing in remap lists, or remap the values in image.py
-#   May want to also consider separating this into two functions
+# TODO: Split into two separate functions
 def wet_mask(landcover, lai):
     """"""
     water = landcover.remap([11], [1], 0).eq(1)
@@ -267,7 +263,8 @@ def daily_avg_lst(tminK, lst, sunrise_ts, t_avg):
     )
     return LST_max.add(LST_min).multiply(0.5).max(t_avg)
 
-    
+
+# TODO: Split into two separate functions
 def canopy_and_soil_LST(LST_avg, t_avg, Rs_MJ,Rld_MJ, fc, tauS, tauL, mu_c, mu_s, RHs, DELTA, gamma, emissivity, albedo):
     """"""
     # Canopy LST
@@ -306,9 +303,10 @@ def RHs_model(ea, esat, DELTA, LST_soil, t_avg, mu_s, water):
         {"ea":ea, "esat":esat, "mu_s":mu_s, "DELTA":DELTA, "LST_soil":LST_soil, "ta": t_avg}
     )
     
-    return RHs.where(water,1).rename("RHs")
+    return RHs.where(water, 1).rename("RHs")
 
 
+# TODO: Split into separate functions and/or move to being in the main model function
 def net_radiation(emissivity, LST_canopy, LST_soil, Rs_MJ, Rld_MJ, albedo, tauS, tauL):
     """"""
     # Net radiation at soil
@@ -337,6 +335,7 @@ def net_radiation(emissivity, LST_canopy, LST_soil, Rs_MJ, Rld_MJ, albedo, tauS,
     return Rnc.add(Rns), Rnc, Rns, G, Rns.subtract(G)
 
 
+# TODO: Split into two separate functions
 def isothermal_net_radiation(Rnc, AEs, tauL, emissivity, t_avg, gg, LST_canopy, LST_soil):
     """Isothermal canopy net radiation and isothermal soil available energy"""
     Rnci  = ee.Image().expression(
@@ -352,6 +351,7 @@ def isothermal_net_radiation(Rnc, AEs, tauL, emissivity, t_avg, gg, LST_canopy, 
     return Rnci, AEsi
 
 
+# TODO: Split into two separate functions
 def mu_terms(Rnc, Rnci, DELTA, gamma, AEs, AEsi, RHs):
     """"""
 
@@ -433,7 +433,7 @@ def add_lapse_correction(ta, elev, elev_coarse):
 ############ TERRAIN SHADE CORRECTION of SRAD (based on Allen et al., 2006)
 #############################################################################
     
-def terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elev, time_start, albedo):
+def terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elev, time_start, albedo, latitude, longitude):
     """Terrain shade correction of daily solar radiation
     
     Parameters
@@ -447,6 +447,10 @@ def terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elev, time_start, albedo):
     time_start : int, ee.Number
     albedo : float
         surface albedo used in Eq.38 term
+    latitude : ee.Image
+        latitude [deg].
+    longitude : ee.Image
+        longitude [deg].
 
     Returns
     -------
@@ -643,12 +647,9 @@ def terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elev, time_start, albedo):
         return ratio
 
     slope  = ee.Terrain.slope(elev).multiply(pi / 180.0)
-    aspect = ee.Terrain.aspect(elev).subtract(180).multiply(pi/180.0)
-    ll = ee.Image.pixelLonLat()
-    lat = ll.select("latitude")
-    lon = ll.select("longitude")
+    aspect = ee.Terrain.aspect(elev).subtract(180).multiply(pi / 180.0)
 
-    shade_coeff2 = daily_ratio(J, KB, KD, slope, aspect, lat, lon, albedo)
+    shade_coeff2 = daily_ratio(J, KB, KD, slope, aspect, latitude, longitude, albedo)
 
-    # corrected SRAD
+    # Corrected SRAD
     return Rs_MJ.multiply(shade_coeff2).rename("Rs_MJ_shade")
