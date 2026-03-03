@@ -82,6 +82,9 @@ class Image:
                 Latitude [deg].  If not set will default to ee.Image.pixelLonLat().
             longitude : ee.Image, ee.Number, float, optional
                 Longitude [deg].  If not set will default to ee.Image.pixelLonLat().
+            meteo_elevation_source : str, optional
+                Meteorology elevation source keyword or asset.
+                If not set the temperature_source keyword or collection ID will be used.
 
         Notes
         -----
@@ -523,15 +526,11 @@ class Image:
             self.solar_radiation_source, variable="srad", time_start=self.time_start
         )
 
-    # TODO: Long term it might be better to allow the user to set this parameter
-    #   instead of basing it on the temperature source
     @lazy_property
     def meteo_elevation(self):
         """Meteorology (temperature) elevation"""
-        if utils.is_number(self.temperature_source):
-            # For testing, if the temperature source is a number,
-            #   return the fine scale elevation (which should also be a number)
-            return self.elevation
+        if "meteo_elevation_source" in self.init_kwargs.keys():
+            return meteorology.elevation(self.init_kwargs["meteo_elevation_source"])
         else:
             return meteorology.elevation(self.temperature_source)
 

@@ -7,7 +7,7 @@ from radet import utils
 def get_source_variable(source, variable, time_start):
     """Helper function for selecting the meteorology variable from the target source"""
     if utils.is_number(source):
-        meteo_img = ee.Image.constant(int(source))
+        meteo_img = ee.Image.constant(float(source))
     elif isinstance(source, ee.computedobject.ComputedObject):
         meteo_img = ee.Image(source)
     elif source in ["IDAHO_EPSCOR/GRIDMET", "GRIDMET"]:
@@ -20,7 +20,9 @@ def get_source_variable(source, variable, time_start):
 
 def elevation(source):
     """Get the meteorology elevation based on the temperature source"""
-    if source in ["IDAHO_EPSCOR/GRIDMET", "GRIDMET"]:
+    if utils.is_number(source):
+        return ee.Image.constant(float(source)).rename('elevation')
+    elif source in ["IDAHO_EPSCOR/GRIDMET", "GRIDMET"]:
         return ee.Image("projects/openet/assets/meteorology/gridmet/ancillary/elevation")
     else:
         raise ValueError("Unsupported temperature source for selecting meteorology elevation: {variable}")
