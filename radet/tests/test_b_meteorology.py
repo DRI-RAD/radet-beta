@@ -12,10 +12,15 @@ import radet.utils as utils
 @pytest.mark.parametrize(
     'source, xy, expected',
     [
+        # LC08_044033_20170716 centroid
+        ['IDAHO_EPSCOR/GRIDMET', [-121.668, 38.905], 7.08],
+        ['GRIDMET', [-121.668, 38.905], 7.08],
+        # LC08_042035_20150713 centroid?
         ['IDAHO_EPSCOR/GRIDMET', [-120.113, 36.336], 90.0],
         ['GRIDMET', [-120.113, 36.336], 90.0],
-        # ['IDAHO_EPSCOR/GRIDMET', [-106.03249, 37.17777], 2402.9],
-        # ['GRIDMET', [-106.03249, 37.17777], 2402.9],
+        #
+        ['100', [-120.113, 36.336], 100.0],
+        [100, [-120.113, 36.336], 100.0],
     ]
 )
 def test_elevation(source, xy, expected, scale=4000, tol=0.1):
@@ -26,11 +31,11 @@ def test_elevation(source, xy, expected, scale=4000, tol=0.1):
 @pytest.mark.parametrize(
     'variable, date, xy, expected',
     [
-        ['tmin', '2017-07-16', [-120.113, 36.336], 292.7],
-        ['tmax', '2017-07-16', [-120.113, 36.336], 312.2],
-        ['qa', '2017-07-16', [-120.113, 36.336], 0.00723],
-        ['u10', '2017-07-16', [-120.113, 36.336], 4.3],
-        ['srad', '2017-07-16', [-120.113, 36.336], 351.2],
+        ['tmin', '2017-07-16', [-121.668, 38.905], 289.6],
+        ['tmax', '2017-07-16', [-121.668, 38.905], 312.4],
+        ['qa', '2017-07-16', [-121.668, 38.905], 0.00937],
+        ['u10', '2017-07-16', [-121.668, 38.905], 1.8],
+        ['srad', '2017-07-16', [-121.668, 38.905], 353.7],
     ]
 )
 def test_gridmet(variable, date, xy, expected, scale=4000, tol=0.001):
@@ -43,7 +48,7 @@ def test_gridmet(variable, date, xy, expected, scale=4000, tol=0.001):
 @pytest.mark.parametrize(
     'source, variable, date, xy, expected',
     [
-        ['IDAHO_EPSCOR/GRIDMET', 'tmin', '2017-07-16', [-120.113, 36.336], 292.7],
+        ['IDAHO_EPSCOR/GRIDMET', 'tmin', '2017-07-16', [-121.668, 38.905], 289.6],
     ]
 )
 def test_get_source_variable(source, variable, date, xy, expected, scale=4000, tol=0.1):

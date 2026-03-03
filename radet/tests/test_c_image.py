@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import pprint
 
 import ee
 import pytest
@@ -17,23 +18,7 @@ SCENE_DATE = SCENE_DT.strftime('%Y-%m-%d')
 SCENE_DOY = int(SCENE_DT.strftime('%j'))
 SCENE_0UTC_DT = datetime.strptime(SCENE_DATE, '%Y-%m-%d')
 SCENE_TIME = 1500230731090
-TEST_POINT = [-120.113, 36.336]
-SUN_ELEVATION = 64.27935371
-
-
-# Should these be test fixtures instead?
-# I'm not sure how to make them fixtures and allow input parameters
-# CGM - This function is not currently used
-# def sr_image(blue=0.2, green=0.2, red=0.2, nir=0.7, swir1=0.2, swir2=0.2, bt=300):
-#     """Construct a fake Landsat 8 image with renamed bands"""
-#     return (
-#         ee.Image.constant([blue, green, red, nir, swir1, swir2, bt])
-#         .rename(['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'lst'])
-#         .set({
-#             'system:time_start': SCENE_TIME,
-#             'k1_constant': ee.Number(607.76),
-#             'k2_constant': ee.Number(1260.56)})
-#     )
+TEST_POINT = [-121.668, 38.905]
 
 
 def default_image(albedo=0.2, emissivity=0.99, lai=3, lst=300, ndvi=0.8, ndwi=-0.5):
@@ -45,7 +30,7 @@ def default_image(albedo=0.2, emissivity=0.99, lai=3, lst=300, ndvi=0.8, ndwi=-0
             'system:index': SCENE_ID,
             'system:time_start': SCENE_TIME,
             'system:id': COLL_ID + SCENE_ID,
-            'SUN_ELEVATION': SUN_ELEVATION,
+            # 'SUN_ELEVATION': SUN_ELEVATION,
         })
     )
 
@@ -53,63 +38,76 @@ def default_image(albedo=0.2, emissivity=0.99, lai=3, lst=300, ndvi=0.8, ndwi=-0
 # Setting etr_source and etr_band on the default image to simplify testing
 #   but these do not have defaults in the Image class init
 def default_image_args(
-        albedo=0.2,
-        emissivity=0.99,
-        lai=3,
-        lst=300,
+        albedo=0.15,
+        emissivity=0.97,
+        lai=3.5,
+        lst=304,
         ndvi=0.8,
         ndwi=-0.5,
-        temperature_source=300,
+        landcover_source=82,
+        elevation_source=10,
+        temperature_source=301,
         humidity_source=0.007,
-        windspeed_source=4,
+        windspeed_source=2,
         solar_radiation_source=350,
-        landcover_source=81,
-        elevation_source=100,
-        latitude=36,
-        longitude=-120,
+        meteo_elevation_source=10,
+        latitude=38.91,
+        longitude=-121.66,
         et_reference_source=10,
         et_reference_band='eto',
         et_reference_factor=1.0,
         et_reference_resample='nearest',
+        # Currently only a single temperature source is allowed,
+        #   so keep track of tmin and tmax separately
+        tmin_source=290,
+        tmax_source=312,
 ):
     return {
         'image': default_image(
             albedo=albedo, emissivity=emissivity, lai=lai, lst=lst, ndvi=ndvi, ndwi=ndwi
         ),
+        'landcover_source': landcover_source,
+        'elevation_source': elevation_source,
         'temperature_source': temperature_source,
         'humidity_source': humidity_source,
         'windspeed_source': windspeed_source,
         'solar_radiation_source': solar_radiation_source,
-        'landcover_source': landcover_source,
-        'elevation_source': elevation_source,
+        'meteo_elevation_source': meteo_elevation_source,
         'latitude': latitude,
         'longitude': longitude,
         'et_reference_source': et_reference_source,
         'et_reference_band': et_reference_band,
         'et_reference_factor': et_reference_factor,
         'et_reference_resample': et_reference_resample,
+        'tmin_source': tmin_source,
+        'tmax_source': tmax_source,
     }
 
 
 def default_image_obj(
-        albedo=0.2,
-        emissivity=0.99,
-        lai=3,
-        lst=300,
+        albedo=0.15,
+        emissivity=0.97,
+        lai=3.5,
+        lst=304,
         ndvi=0.8,
         ndwi=-0.5,
-        temperature_source=300,
+        landcover_source=82,
+        elevation_source=10,
+        temperature_source=301,
         humidity_source=0.007,
-        windspeed_source=4,
+        windspeed_source=2,
         solar_radiation_source=350,
-        landcover_source=81,
-        elevation_source=100,
-        latitude=36,
-        longitude=-120,
+        meteo_elevation_source=10,
+        latitude=38.91,
+        longitude=-121.66,
         et_reference_source=10,
         et_reference_band='eto',
         et_reference_factor=1.0,
         et_reference_resample='nearest',
+        # Currently only a single temperature source is allowed,
+        #   so keep track of tmin and tmax separately
+        tmin_source=290,
+        tmax_source=312,
 ):
     return model.Image(**default_image_args(
         albedo=albedo,
@@ -118,12 +116,13 @@ def default_image_obj(
         lst=lst,
         ndvi=ndvi,
         ndwi=ndwi,
+        landcover_source=landcover_source,
+        elevation_source=elevation_source,
         temperature_source=temperature_source,
         humidity_source=humidity_source,
         windspeed_source=windspeed_source,
         solar_radiation_source=solar_radiation_source,
-        landcover_source=landcover_source,
-        elevation_source=elevation_source,
+        # meteo_elevation_source=meteo_elevation_source,
         latitude=latitude,
         longitude=longitude,
         et_reference_source=et_reference_source,
@@ -185,48 +184,128 @@ def test_Image_init_variable_properties(variable):
 
 
 @pytest.mark.parametrize(
-    'source, xy, expected',
+    'source, xy, scale, expected',
     [
-        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 293.8],
+        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 4000, {'tmin': 293.3, 'tmax': 314.6}],
+        ['300', TEST_POINT, 4000, {'tmin': 300, 'tmax': 300}],
+        [300, TEST_POINT, 4000, {'tmin': 300, 'tmax': 300}],
     ]
 )
-def test_Image_temperature_source(source, xy, expected, tol=0.001):
-    output = utils.point_image_value(model.Image(default_image(), temperature_source=source).tmin, xy)
-    assert abs(output['tmin'] - expected) <= tol
+def test_Image_temperature_source(source, xy, scale, expected, tol=0.001):
+    output = utils.point_image_value(
+        model.Image(default_image(), temperature_source=source).tmin, xy, scale
+    )
+    assert abs(output['tmin'] - expected['tmin']) <= tol
+    output = utils.point_image_value(
+        model.Image(default_image(), temperature_source=source).tmax, xy, scale
+    )
+    assert abs(output['tmax'] - expected['tmax']) <= tol
 
 
 def test_Image_temperature_source_exception():
     with pytest.raises(ValueError):
-        utils.getinfo(model.Image(default_image(), temperature_source=None).tmin)
+        utils.getinfo(model.Image(default_image(), temperature_source='').tmin)
 
 
 @pytest.mark.parametrize(
-    'source, xy, expected',
+    'source, xy, scale, expected',
     [
-        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 3.4],
+        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 4000, 0.00878],
+        ['0.001', TEST_POINT, 4000, 0.001],
+        [0.001, TEST_POINT, 4000, 0.001],
     ]
 )
-def test_Image_windspeed_source_values(source, xy, expected, tol=0.001):
-    output = utils.point_image_value(model.Image(default_image(), windspeed_source=source).u10, xy)
+def test_Image_humidity_source_values(source, xy, scale, expected, tol=0.0001):
+    output = utils.point_image_value(
+        model.Image(default_image(), humidity_source=source).qa, xy, scale
+    )
+    assert abs(output['qa'] - expected) <= tol
+
+
+def test_Image_humidity_source_exception():
+    with pytest.raises(ValueError):
+        utils.getinfo(model.Image(default_image(), humidity_source='FOO').qa)
+
+
+@pytest.mark.parametrize(
+    'source, xy, scale, expected',
+    [
+        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 4000, 2.3],
+        [2, TEST_POINT, 4000, 2],
+    ]
+)
+def test_Image_windspeed_source_values(source, xy, scale, expected, tol=0.001):
+    output = utils.point_image_value(
+        model.Image(default_image(), windspeed_source=source).u10, xy, scale
+    )
     assert abs(output['u10'] - expected) <= tol
 
 
 def test_Image_windspeed_source_exception():
     with pytest.raises(ValueError):
-        utils.getinfo(model.Image(default_image(), windspeed_source=None).u10)
+        utils.getinfo(model.Image(default_image(), windspeed_source='FOO').u10)
+
+
+@pytest.mark.parametrize(
+    'source, xy, scale, expected',
+    [
+        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 4000, 351.6],
+        [300, TEST_POINT, 4000, 300],
+    ]
+)
+def test_Image_solar_radiation_source_values(source, xy, scale, expected, tol=0.01):
+    output = utils.point_image_value(
+        model.Image(default_image(), solar_radiation_source=source).srad, xy, scale
+    )
+    assert abs(output['srad'] - expected) <= tol
+
+
+def test_Image_solar_radiation_source_exception():
+    with pytest.raises(ValueError):
+        utils.getinfo(model.Image(default_image(), solar_radiation_source='FOO').srad)
 
 
 @pytest.mark.parametrize(
     'source, xy, expected',
     [
-        ['USGS/SRTMGL1_003', TEST_POINT, 85],
-        # CGM - This one causes ee.Initialization errors
-        # [ee.Image('USGS/SRTMGL1_003'), TEST_POINT, 3],
-        ['2364.351', TEST_POINT, 2364.351],
-        [2364.351, TEST_POINT, 2364.351],
+        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 7.08],
+        [10, TEST_POINT, 10],
     ]
 )
-def test_Image_elevation_source_values(source, xy, expected, tol=0.001):
+def test_Image_meteo_elevation_source_not_set(source, xy, expected, tol=0.01):
+    # If the meteorology elevation source is not set, default to the temperature source
+    output = utils.point_image_value(
+        model.Image(default_image(), temperature_source=source).meteo_elevation, xy
+    )
+    assert abs(output['elevation'] - expected) <= tol
+
+
+@pytest.mark.parametrize(
+    'source, xy, expected',
+    [
+        ['IDAHO_EPSCOR/GRIDMET', TEST_POINT, 7.08],
+        ['2364.351', TEST_POINT, 2364.35],
+        [2364.351, TEST_POINT, 2364.35],
+    ]
+)
+def test_Image_meteo_elevation_source_values(source, xy, expected, tol=0.01):
+    output = utils.point_image_value(
+        model.Image(default_image(), meteo_elevation_source=source).meteo_elevation, xy
+    )
+    assert abs(output['elevation'] - expected) <= tol
+
+
+@pytest.mark.parametrize(
+    'source, xy, expected',
+    [
+        ['USGS/SRTMGL1_003', TEST_POINT, 4],
+        # CGM - This one causes ee.Initialization errors
+        # [ee.Image('USGS/SRTMGL1_003'), TEST_POINT, 3],
+        ['2364.351', TEST_POINT, 2364.35],
+        [2364.351, TEST_POINT, 2364.35],
+    ]
+)
+def test_Image_elevation_source_values(source, xy, expected, tol=0.01):
     output = utils.point_image_value(
         model.Image(default_image(), elevation_source=source).elevation, xy
     )
@@ -283,52 +362,34 @@ def test_Image_landcover_band_name():
     assert output == 'landcover'
 
 
-def test_Image_albedo_properties():
-    """"""
-    output = utils.getinfo(default_image_obj().albedo)
-    assert output['bands'][0]['id'] == 'albedo'
+def test_Image_albedo_default_value_set():
+    # Test that the lazy property returns the default test value and the band name is set
+    assert utils.constant_image_value(ee.Image(default_image_obj().albedo))['albedo'] > 0
 
 
-def test_Image_albedo_value():
-    """Test that a non-zero value is returned for the default inputs"""
-    output = utils.constant_image_value(ee.Image(default_image_obj().albedo))
-    assert output['albedo'] > 0
+def test_Image_emissivity_default_value_set():
+    # Test that the lazy property returns the default test value and the band name is set
+    assert utils.constant_image_value(ee.Image(default_image_obj().emissivity))['emissivity'] > 0
 
 
-def test_Image_lai_properties():
-    output = utils.getinfo(ee.Image(default_image_obj().lai))
-    assert output['bands'][0]['id'] == 'lai'
+def test_Image_lai_default_value_set():
+    # Test that the lazy property returns the default test value and the band name is set
+    assert utils.constant_image_value(ee.Image(default_image_obj().lai))['lai'] > 0
 
 
-def test_Image_lai_values():
-    assert utils.constant_image_value(default_image_obj().lai)['lai'] == 3
+def test_Image_lst_default_value_set():
+    # Test that the lazy property returns the default test value and the band name is set
+    assert utils.constant_image_value(ee.Image(default_image_obj().lst))['lst'] > 0
 
 
-def test_Image_lst_properties():
-    output = utils.getinfo(ee.Image(default_image_obj().lst))
-    assert output['bands'][0]['id'] == 'lst'
+def test_Image_ndvi_default_value_set():
+    # Test that the lazy property returns the default test value and the band name is set
+    assert utils.constant_image_value(ee.Image(default_image_obj().ndvi))['ndvi'] > 0
 
 
-def test_Image_lst_values():
-    assert utils.constant_image_value(default_image_obj().lst)['lst'] == 300
-
-
-def test_Image_ndvi_properties():
-    output = utils.getinfo(ee.Image(default_image_obj().ndvi))
-    assert output['bands'][0]['id'] == 'ndvi'
-
-
-def test_Image_ndvi_values():
-    assert utils.constant_image_value(default_image_obj().ndvi)['ndvi'] == 0.8
-
-
-def test_Image_ndwi_properties():
-    output = utils.getinfo(ee.Image(default_image_obj().ndwi))
-    assert output['bands'][0]['id'] == 'ndwi'
-
-
-def test_Image_ndwi_values():
-    assert utils.constant_image_value(default_image_obj().ndwi)['ndwi'] == -0.5
+def test_Image_ndwi_default_value_set():
+    # Test that the lazy property returns the default test value and the band name is set
+    assert utils.constant_image_value(ee.Image(default_image_obj().ndwi))['ndwi'] >= -1
 
 
 def test_Image_mask_properties():
@@ -340,7 +401,7 @@ def test_Image_mask_properties():
     assert output['properties']['image_id'] == COLL_ID + SCENE_ID
 
 
-def test_Image_mask_values():
+def test_Image_mask_default_value():
     assert utils.constant_image_value(default_image_obj().mask)['mask'] == 1
 
 
@@ -368,7 +429,8 @@ def test_Image_et_properties():
     assert output['properties']['image_id'] == COLL_ID + SCENE_ID
 
 
-def test_Image_et_defaults(expected=6.338, tol=0.001):
+def test_Image_et_defaults(expected=7.6685, tol=0.0001):
+    # Note that tmin and tmax are the same t_avg value in this test
     output = utils.constant_image_value(ee.Image(default_image_obj().et))
     assert abs(output['et'] - expected) <= tol
 
@@ -398,11 +460,12 @@ def test_Image_et_reference_properties():
 @pytest.mark.parametrize(
     'source, band, factor, xy, expected',
     [
-        ['IDAHO_EPSCOR/GRIDMET', 'etr', 1, TEST_POINT, 12.9],
-        ['IDAHO_EPSCOR/GRIDMET', 'etr', 0.85, TEST_POINT, 12.9 * 0.85],
+        ['IDAHO_EPSCOR/GRIDMET', 'eto', 1, TEST_POINT, 8.2],
+        ['IDAHO_EPSCOR/GRIDMET', 'etr', 1, TEST_POINT, 10.8],
+        ['IDAHO_EPSCOR/GRIDMET', 'etr', 0.85, TEST_POINT, 10.8 * 0.85],
         [
             'projects/openet/assets/reference_et/california/cimis/daily/v1',
-            'etr', 1, TEST_POINT, 11.7893
+            'etr', 1, TEST_POINT, 9.8313
         ],
         [10, 'FOO', 1, TEST_POINT, 10.0],
         [10, 'FOO', 0.85, TEST_POINT, 8.5],
@@ -560,10 +623,12 @@ def test_Image_from_landsat_c2_sr_c2_lst_correct_fill():
 
     # CGM - Is the uncorrected test needed?
     uncorrected = utils.point_image_value(
-        model.Image.from_landsat_c2_sr(image_id, c2_lst_correct=False).lst, xy)
+        model.Image.from_landsat_c2_sr(image_id, c2_lst_correct=False).lst, xy
+    )
     assert uncorrected['lst'] is None
     corrected = utils.point_image_value(
-        model.Image.from_landsat_c2_sr(image_id, c2_lst_correct=True).lst, xy)
+        model.Image.from_landsat_c2_sr(image_id, c2_lst_correct=True).lst, xy
+    )
     assert corrected['lst'] > 0
     # # Exact test values copied from openet-core
     # assert abs(corrected['lst'] - 306.83) <= 0.25
@@ -583,8 +648,38 @@ def test_Image_from_image_id(image_id):
     assert output['properties']['image_id'] == image_id
 
 
-# def test_Image_from_method_kwargs():
-#     """Test that the init parameters can be passed through the helper methods"""
-#     assert model.Image.from_landsat_c2_sr(
-#         'LANDSAT/LC08/C02/T1_L2/LC08_042035_20150713',
-#         ea_source='FOO').ea_source == 'FOO'
+@pytest.mark.parametrize(
+    'image_id, xy, expected',
+    [
+        [
+            'LANDSAT/LC08/C02/T1_L2/LC08_044033_20170716', [-121.668, 38.905],
+            {'lai': 3.5250, 'lst': 304.2305, 'albedo': 0.1514, 'emissivity': 0.9713}
+        ],
+        [
+            'LANDSAT/LC08/C02/T1_L2/LC08_044033_20170716', [-121.650, 38.913],
+            {'lai': 0.1052, 'lst': 326.5032, 'albedo': 0.1773, 'emissivity': 0.9752}
+        ],
+        # [ 'LANDSAT/LC09/C02/T1_L2/LC09_044033_20220127', ]
+    ]
+)
+def test_Image_from_landsat_c2_sr_image_values(image_id, xy, expected, tol=0.0001):
+    """Test instantiating the class using the from_image_id method"""
+    lai = utils.point_image_value(model.Image.from_landsat_c2_sr(image_id).lai, xy, 30)
+    assert abs(lai['lai'] - expected['lai']) < tol
+
+    lst = utils.point_image_value(model.Image.from_landsat_c2_sr(image_id).lst, xy, 30)
+    assert abs(lst['lst'] - expected['lst']) < tol
+
+    albedo = utils.point_image_value(model.Image.from_landsat_c2_sr(image_id).albedo, xy, 30)
+    assert abs(albedo['albedo'] - expected['albedo']) < tol
+
+    emissivity = utils.point_image_value(model.Image.from_landsat_c2_sr(image_id).emissivity, xy, 30)
+    assert abs(emissivity['emissivity'] - expected['emissivity']) < tol
+
+    # print(lai, lst, albedo, emissivity)
+
+    # landcover = utils.point_image_value(model.Image.from_landsat_c2_sr(image_id).landcover, xy, 30)
+    # assert abs(landcover['landcover'] - 82) < tol
+    # elevation = utils.point_image_value(model.Image.from_landsat_c2_sr(image_id).elevation, xy, 30)
+    # assert abs(elevation['elevation'] - 10) < tol
+

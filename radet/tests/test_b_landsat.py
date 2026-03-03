@@ -11,10 +11,10 @@ import radet.utils as utils
 
 # TODO: Try moving to conftest and/or make a fixture
 SCENE_ID = 'LC08_044033_20170716'
-# SCENE_ID = 'LC08_042035_20150713'
 SCENE_DT = datetime.strptime(SCENE_ID[-8:], '%Y%m%d')
 SCENE_DATE = SCENE_DT.strftime('%Y-%m-%d')
 SCENE_TIME = utils.millis(SCENE_DT)
+# SCENE_TIME = 1500230731090
 
 
 def sr_image(blue=0.2, green=0.2, red=0.2, nir=0.7, swir1=0.2, swir2=0.2, bt=300, qa_pixel=0):
