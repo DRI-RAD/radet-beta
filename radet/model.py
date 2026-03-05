@@ -137,11 +137,6 @@ def et(
     # Daily mean LST 
     LST_avg = daily_avg_lst(tmninK_cor, lst, sunrise_ts, t_avg)
 
-    # TODO: Switch to a number calculation instead of an image expression
-    # Soil conductive exchange coefficient
-    # gg = 1000 * ((pi / 86400) ** 0.5) * 86400 / (10 ** 6)
-    gg = ee.Image().expression("1000 * ((pi / 86400) ** 0.5) * 86400 / (10 ** 6)", {"pi": pi})
-
     ##########################################
     ### initial guess: mu_s = 1, mu_c = 1
     ##########################################    
@@ -152,18 +147,19 @@ def et(
     RHs = ea.divide(esat)
         
     # Soil and canopy LST
-    LST_canopy, LST_soil = canopy_and_soil_LST(
-        LST_avg, t_avg, Rs_MJ_cor, Rld_MJ, fc, tauS, tauL, mu_c, mu_s, RHs, DELTA, gamma, emissivity, albedo
-    )
+    LST_canopy = canopy_LST(LST_avg, t_avg, fc, mu_c, mu_s, RHs, DELTA, gamma)
+    LST_soil = soil_LST(LST_avg, LST_canopy, Rs_MJ_cor, Rld_MJ, tauS, tauL, emissivity, albedo)
 
     # Daily mean net radiation (total, soil and canopy, soil heat flux) (MJ m-2 d-1)
     Rn, Rnc, Rns, G, AEs = net_radiation(emissivity, LST_canopy, LST_soil, Rs_MJ_cor, Rld_MJ, albedo, tauS, tauL)
 
     # Isothermal canopy net radiation and isothermal soil available energy
-    Rnci, AEsi = isothermal_net_radiation(Rnc, AEs, tauL, emissivity, t_avg, gg, LST_canopy, LST_soil)
+    Rnci = isothermal_net_radiation(Rnc, tauL, emissivity, t_avg, LST_canopy)
+    AEsi = isothermal_soil_available_energy(AEs, emissivity, t_avg, LST_soil)
 
     # mu terms
-    mu_c, mu_s = mu_terms(Rnc, Rnci, DELTA, gamma, AEs, AEsi, RHs)
+    mu_c = mu_canopy(Rnc, Rnci, DELTA, gamma)
+    mu_s = mu_soil(AEs, AEsi, RHs, DELTA, gamma)
 
     ##########################################
     ### Second run
@@ -171,36 +167,32 @@ def et(
     # RHs 
     RHs = RHs_model(ea, esat, DELTA, LST_soil, t_avg, mu_s, water)
     
-    # soil and canopy LST
-    LST_canopy, LST_soil= canopy_and_soil_LST(
-        LST_avg, t_avg, Rs_MJ_cor, Rld_MJ, fc, tauS, tauL, mu_c, mu_s, RHs, DELTA, gamma, emissivity, albedo
-    )
+    # Soil and canopy LST
+    LST_canopy = canopy_LST(LST_avg, t_avg, fc, mu_c, mu_s, RHs, DELTA, gamma)
+    LST_soil = soil_LST(LST_avg, LST_canopy, Rs_MJ_cor, Rld_MJ, tauS, tauL, emissivity, albedo)
 
     # Daily mean net radiation (total, soil and canopy, soil heat flux) (MJ m-2 d-1)
     Rn, Rnc, Rns, G, AEs = net_radiation(emissivity, LST_canopy, LST_soil, Rs_MJ_cor, Rld_MJ, albedo, tauS, tauL)
 
     # Isothermal canopy net radiation and isothermal soil available energy
-    Rnci, AEsi = isothermal_net_radiation(Rnc, AEs, tauL, emissivity, t_avg, gg, LST_canopy, LST_soil)
+    Rnci = isothermal_net_radiation(Rnc, tauL, emissivity, t_avg, LST_canopy)
+    AEsi = isothermal_soil_available_energy(AEs, emissivity, t_avg, LST_soil)
 
     # mu terms
-    mu_c, mu_s = mu_terms(Rnc, Rnci, DELTA, gamma, AEs, AEsi, RHs)
+    mu_c = mu_canopy(Rnc, Rnci, DELTA, gamma)
+    mu_s = mu_soil(AEs, AEsi, RHs, DELTA, gamma)
 
     ##########################################
     # ET model (mm/day)
     ##########################################
 
     # ET_DIF (mm/day)
-    ET_DIF = DIF_model(gamma, DELTA, Rnc, AEs, RHs, mu_c, mu_s)
+    ET_DIF = DIF_model(Rnc, AEs, RHs, DELTA, gamma, mu_c, mu_s)
 
     # Penman aerodynamic term
-    Ea = aerodynamic_term(del_LC, fc, LST_soil, RHs, gamma, DELTA, u2, esat, ea)
+    Ea = aerodynamic_term(del_LC, fc, LST_soil, RHs, DELTA, gamma, u2, esat, ea)
 
     return ee.Image(ET_DIF.add(Ea).rename("ET"))
-
-    # # CGM - If you adjust the order of operations in DIF_model() you can keep
-    # #   a reference to the original image projection and don't need to reset it here
-    # # This approach seems to be working and this block will be removed in the future
-    # return ee.Image(ET_DIF.add(Ea).rename("ET")).setDefaultProjection(proj)
 
 
 # TODO: Remove from dedicated function or split into separate functions
@@ -228,6 +220,65 @@ def wet_mask(landcover, lai):
     return wet.Or(wet_ww2), water
 
 
+# def clear_sky_Rs_MJ(srad):
+#     """"""
+#     return srad.multiply(86400).divide(1e6).rename("Rs_MJ")
+#
+#
+# def clear_sky_Ra_MJ(time_start, lat):
+#     """"""
+#     J = ee.Number(ee.Date(time_start).getRelative("day", "year")).add(1)
+#     phi = lat.multiply(pi / 180)
+#
+#     dr = ee.Image().expression("1 + 0.033 * cos(2 * PI / 365 * J)", {"PI": pi, "J": J})
+#     delta = ee.Image().expression("0.409 * sin(2 * PI / 365 * J - 1.39)", {"PI": pi, "J": J})
+#     cosW = ee.Image().expression("-tan(phi) * tan(delta)", {"phi": phi, "delta": delta})
+#     omega = cosW.clamp(-1, 1).acos()
+#
+#     Ra_MJ = ee.Image().expression(
+#         "(24 / PI) * 4.92 * dr * (omega * sin(phi) * sin(delta) + cos(phi) * cos(delta) * sin(omega))",
+#         {"PI": pi, "dr": dr, "omega": omega, "phi": phi, "delta": delta},
+#     )
+#
+#     return Ra_MJ.rename("Ra_MJ")
+#
+#
+# def clear_sky_fcd(Rs_MJ, time_start, lat, elev):
+#     """"""
+#     J = ee.Number(ee.Date(time_start).getRelative("day", "year")).add(1)
+#     phi = lat.multiply(pi / 180)
+#
+#     dr = ee.Image().expression("1 + 0.033 * cos(2 * PI / 365 * J)", {"PI": pi, "J": J})
+#     delta = ee.Image().expression("0.409 * sin(2 * PI / 365 * J - 1.39)", {"PI": pi, "J": J})
+#     cosW = ee.Image().expression("-tan(phi) * tan(delta)", {"phi": phi, "delta": delta})
+#     omega = cosW.clamp(-1, 1).acos()
+#
+#     Ra_MJ = ee.Image().expression(
+#         "(24 / PI) * 4.92 * dr * (omega * sin(phi) * sin(delta) + cos(phi) * cos(delta) * sin(omega))",
+#         {"PI": pi, "dr": dr, "omega": omega, "phi": phi, "delta": delta},
+#     )
+#
+#     Rso_MJ = ee.Image().expression("(0.75 + 2e-5 * elev) * Ra", {"elev": elev, "Ra": Ra_MJ})
+#
+#     ratio = Rs_MJ.divide(Rso_MJ.where(Rso_MJ.eq(0), 1)).clamp(0.3, 1)
+#     fcd = ee.Image(1.35).multiply(ratio).subtract(0.35)
+#
+#     return fcd.rename("fcd")
+#
+#
+# def clear_sky_sunrise_ts(time_start, lat):
+#     """"""
+#     J = ee.Number(ee.Date(time_start).getRelative("day", "year")).add(1)
+#     phi = lat.multiply(pi / 180)
+#     delta = ee.Image().expression("0.409 * sin(2 * PI / 365 * J - 1.39)", {"PI": pi, "J": J})
+#     cosW = ee.Image().expression("-tan(phi) * tan(delta)", {"phi": phi, "delta": delta})
+#     omega = cosW.clamp(-1, 1).acos()
+#     day_length = ee.Image().expression("24 / PI * omega", {"PI": pi, "omega": omega})
+#     sunrise_ts = ee.Image().expression("12 - day_length / 2", {"day_length": day_length})
+#
+#     return sunrise_ts
+
+
 def clear_sky_terms(time_start, lat, elev, srad):
     """"""
     J = ee.Number(ee.Date(time_start).getRelative("day", "year")).add(1)
@@ -251,7 +302,7 @@ def clear_sky_terms(time_start, lat, elev, srad):
     day_length = ee.Image().expression("24 / PI * omega", {"PI": pi, "omega": omega})
     sunrise_ts = ee.Image().expression("12 - day_length / 2", {"day_length": day_length})
 
-    return Rs_MJ, Ra_MJ, fcd, sunrise_ts
+    return Rs_MJ.rename("Rs_MJ"), Ra_MJ.rename("Ra_MJ"), fcd.rename("fcd"), sunrise_ts
 
 
 def daily_avg_lst(tminK, lst, sunrise_ts, t_avg):
@@ -261,21 +312,24 @@ def daily_avg_lst(tminK, lst, sunrise_ts, t_avg):
         "LST_min + (LST - LST_min) / (cos((10 - 12.5) / (12.5 - sunrise_ts) / 2 * PI))",
         {"PI": pi, "LST_min": LST_min, "LST": lst, "sunrise_ts": sunrise_ts},
     )
-    return LST_max.add(LST_min).multiply(0.5).max(t_avg)
+    return LST_max.add(LST_min).multiply(0.5).max(t_avg).rename("LST_avg")
 
 
-# TODO: Split into two separate functions
-def canopy_and_soil_LST(LST_avg, t_avg, Rs_MJ,Rld_MJ, fc, tauS, tauL, mu_c, mu_s, RHs, DELTA, gamma, emissivity, albedo):
-    """"""
-    # Canopy LST
+def canopy_LST(LST_avg, t_avg, fc, mu_c, mu_s, RHs, DELTA, gamma):
+    """Canopy LST"""
     beta = ee.Image().expression(
         "fc / (fc + mu_s / mu_c * (1 - fc) * (DELTA + gamma * mu_c) / (DELTA * RHs + gamma * mu_s))",
-        {"fc": fc, "DELTA": DELTA, "gamma": gamma, "RHs": RHs, "mu_c": mu_c, "mu_s": mu_s})
-    
+        {"fc": fc, "DELTA": DELTA, "gamma": gamma, "RHs": RHs, "mu_c": mu_c, "mu_s": mu_s}
+    )
     LST_canopy = ee.Image().expression(
         "t_avg + beta * (LST_avg - t_avg)", {"t_avg": t_avg, "LST_avg": LST_avg, "beta": beta}
     )
-    
+
+    return LST_canopy.rename("LST_canopy")
+
+
+def soil_LST(LST_avg, LST_canopy, Rs_MJ, Rld_MJ, tauS, tauL, emissivity, albedo):
+    """Soil LST"""
     # Maximum soil LST
     LST_soil_max = ee.Image().expression(
         "((tauS * (1 - albedo) * Rs_MJ"
@@ -285,15 +339,13 @@ def canopy_and_soil_LST(LST_avg, t_avg, Rs_MJ,Rld_MJ, fc, tauS, tauL, mu_c, mu_s
             "Rld": Rld_MJ, "LST_canopy": LST_canopy, "emis": emissivity, "SIG": SIG
         }
     )
-    
-    # Soil LST
     LST_soil = ee.Image().expression(
         "((LST_avg ** 4 - (1 - tauL) * (LST_canopy) ** 4) / tauL) ** (1 / 4)",
         {"LST_canopy": LST_canopy, "LST_avg": LST_avg, "tauL": tauL}
     )
-    LST_soil = LST_soil.min(LST_soil_max)    
-    
-    return LST_canopy, LST_soil
+    LST_soil = LST_soil.min(LST_soil_max)
+
+    return LST_soil.rename("LST_soil")
 
 
 def RHs_model(ea, esat, DELTA, LST_soil, t_avg, mu_s, water):
@@ -317,7 +369,7 @@ def net_radiation(emissivity, LST_canopy, LST_soil, Rs_MJ, Rld_MJ, albedo, tauS,
             "tauS": tauS, "tauL": tauL, "Rs_MJ": Rs_MJ, "albedo": albedo, "Rld": Rld_MJ,
             "emis": emissivity, "SIG": SIG, "LST_canopy": LST_canopy, "LST_soil": LST_soil
         }
-    ).rename("Rns").max(0)
+    ).max(0).rename("Rns")
 
     # Net radiation at canopy
     Rnc  = ee.Image().expression(
@@ -327,74 +379,68 @@ def net_radiation(emissivity, LST_canopy, LST_soil, Rs_MJ, Rld_MJ, albedo, tauS,
             "tauS": tauS, "tauL": tauL, "Rs_MJ": Rs_MJ, "albedo": albedo, "Rld": Rld_MJ,
             "emis": emissivity, "SIG": SIG, "LST_canopy": LST_canopy, "LST_soil": LST_soil
         }
-    ).rename("Rnc").max(0)
+    ).max(0).rename("Rnc")
 
     # Soil heat flux
     G = ee.Image().expression("0.35 * Rns - 1.5", {"Rns": Rns}).rename("G")
     
-    return Rnc.add(Rns), Rnc, Rns, G, Rns.subtract(G)
+    return Rnc.add(Rns).rename("Rn"), Rnc, Rns, G, Rns.subtract(G).rename("AEs")
 
 
-# TODO: Split into two separate functions
-def isothermal_net_radiation(Rnc, AEs, tauL, emissivity, t_avg, gg, LST_canopy, LST_soil):
-    """Isothermal canopy net radiation and isothermal soil available energy"""
-    Rnci  = ee.Image().expression(
+def isothermal_net_radiation(Rnc, tauL, emissivity, t_avg, LST_canopy):
+    """Isothermal canopy net radiation"""
+    return ee.Image().expression(
         "Rnc + 4 * 2 * (1 - tauL) * emis * SIG * ta ** 3 * (LST - ta)",
         {"Rnc": Rnc, "tauL": tauL, "emis": emissivity, "SIG": SIG, "ta": t_avg, "LST": LST_canopy}
     ).rename("Rnci")
 
-    AEsi  = ee.Image().expression(
+
+def isothermal_soil_available_energy(AEs, emissivity, t_avg, LST_soil):
+    """Isothermal soil available energy"""
+    gg = 1000 * ((pi / 86400) ** 0.5) * 86400 / (10 ** 6)
+
+    return ee.Image().expression(
         "AEs + (4 * emis * SIG * ta ** 3 + gg) * (LST - ta)",
         {"AEs": AEs, "emis": emissivity, "SIG": SIG, "ta": t_avg, "LST": LST_soil, "gg": gg}
     ).rename("AEsi")
 
-    return Rnci, AEsi
 
-
-# TODO: Split into two separate functions
-def mu_terms(Rnc, Rnci, DELTA, gamma, AEs, AEsi, RHs):
+def mu_canopy(Rnc, Rnci, DELTA, gamma):
     """"""
 
     Rnc_safe = Rnc.max(0.001)
-    AEs_safe = AEs.max(0.001)
     Rnci_safe = Rnci.max(Rnc_safe)
-    AEsi_safe = AEsi.max(AEs_safe)
-    
-    mu_c = ee.Image().expression(
+
+    return ee.Image().expression(
         "(Rnci + sqrt(Rnci ** 2 + 4 * DELTA / gamma * Rnc * (Rnci - Rnc))) / (2 * Rnc)",
         {"Rnc": Rnc_safe, "Rnci": Rnci_safe, "DELTA": DELTA, "gamma": gamma}
     ).max(1).rename("mu_c")
 
-    mu_s = ee.Image().expression(
+
+def mu_soil(AEs, AEsi, RHs, DELTA, gamma):
+    """"""
+
+    AEs_safe = AEs.max(0.001)
+    AEsi_safe = AEsi.max(AEs_safe)
+
+    return ee.Image().expression(
         "(AEsi + sqrt(AEsi ** 2 + 4 * RHs * DELTA / gamma * AEs * (AEsi - AEs))) / (2 * AEs)",
         {"AEs": AEs_safe, "AEsi": AEsi_safe, "DELTA": DELTA, "gamma": gamma, "RHs": RHs}
     ).max(1).rename("mu_s")
 
-    return mu_c, mu_s
 
-
-def DIF_model(gamma, DELTA, Rnc, AEs, RHs, mu_c, mu_s):
+def DIF_model(Rnc, AEs, RHs, DELTA, gamma, mu_c, mu_s):
     """"""
-    # CGM - Changing the order of operations so that Rnc is the first image used
-    #   will allow the output image to have the original Landsat image projection
-    #   and remove the need for setting the default projection
     return (
         Rnc.expression(
-            "(Rnc * DELTA / (DELTA + gamma * mu_c) + RHs * DELTA / (RHs * DELTA + gamma * mu_s) * AEs) / 2.45",
+            "(Rnc * DELTA / (DELTA + gamma * mu_c) + RHs * DELTA * AEs / (RHs * DELTA + gamma * mu_s)) / 2.45",
             {"gamma": gamma, "DELTA": DELTA, "Rnc": Rnc, "AEs": AEs, "RHs": RHs, "mu_c": mu_c, "mu_s": mu_s},
         )
         .max(0).rename("ET_DIF")
     )
-    # return (
-    #     ee.Image().expression(
-    #         "(DELTA / (DELTA + gamma * mu_c) + RHs * DELTA / (RHs * DELTA + gamma * mu_s) * AEs) / 2.45",
-    #         {"gamma": gamma, "DELTA": DELTA, "Rnc": Rnc, "AEs": AEs, "RHs": RHs, "mu_c": mu_c, "mu_s": mu_s},
-    #     )
-    #     .max(0).rename("ET_DIF")
-    # )
 
 
-def aerodynamic_term(del_LC, fc, LST_soil, RHs, gamma, DELTA, u2, esat, ea):
+def aerodynamic_term(del_LC, fc, LST_soil, RHs, DELTA, gamma, u2, esat, ea):
     """"""
     esat_LST_soil = ee.Image().expression(
         "0.6108 * exp(17.27 * (t - 273.15) / ((t - 273.15) + 237.3))", {"t": LST_soil}
@@ -402,7 +448,7 @@ def aerodynamic_term(del_LC, fc, LST_soil, RHs, gamma, DELTA, u2, esat, ea):
 
     del_water = ee.Image().expression(
         "fc + (1 - fc) * (RHs ** (esat_soil - esat_soil * RHs)) / (1 + exp(10 - LST_soil + 273.15))",
-        {"fc":fc, "RHs":RHs, "esat_soil":esat_LST_soil, "LST_soil":LST_soil}
+        {"fc": fc, "RHs": RHs, "esat_soil": esat_LST_soil, "LST_soil": LST_soil}
     )
     
     return ee.Image().expression(
@@ -622,8 +668,7 @@ def terrain_shade_correct_srad(Rs_MJ, Ra_MJ, elev, time_start, albedo, latitude,
         )
 
     # 4) daily_ratio (Eq.38)
-    def daily_ratio(J, KB, KD, slope, aspect, lat, lon, albedo):
-        doy = J
+    def daily_ratio(doy, KB, KD, slope, aspect, lat, lon, albedo):
 
         cos_theta_flat  = cosThetaIntegral(ee.Image(0), ee.Image(0), doy, lat, lon)
         cos_theta_slope = cosThetaIntegral(slope, aspect, doy, lat, lon)
